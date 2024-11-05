@@ -601,7 +601,7 @@ class V2Catalog(VoidCatalog):
         if 'TRIANGLE' in hdu_names:
             self.triangle_info = self._catalog['TRIANGLE'].header
             self.triangle = Table(self._catalog['TRIANGLE'].data)
-            self.tables['TRAINGLE'] = self.triangle
+            self.tables['TRIANGLE'] = self.triangle
             self.headers['TRIANGLE'] = self.triangle_info
         if 'GALVIZ' in hdu_names:
             self.galviz_info = self._catalog['GALVIZ'].header

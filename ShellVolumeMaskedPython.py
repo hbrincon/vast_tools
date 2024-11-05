@@ -42,7 +42,7 @@ def shell_fraction(
     elif mask_type == "periodic":
         mask_mode = 2
     else:
-        raise ValueError("mask_type must be 'ra_dec_z', 'xyz', or 'periodic'")
+        raise ValueError(f"mask_type must be 'ra_dec_z', 'xyz', or 'periodic.' The provided value was '{mask_type}'")
     
     
     if dist_limits is None:

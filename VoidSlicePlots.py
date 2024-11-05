@@ -31,6 +31,16 @@ D2R = np.pi/180.
 def toSky(cs):
     '''
     Convert Cartesian coordinates to sky coordinates
+    
+    params:
+    ----------------------------------------------------------
+    cs (numpy array of shape (3,N)): The cartesian coordinates 
+        of the catalog in Mpc/h
+        
+    returns:
+    ------------------------------------------------
+    r, ra, dec (1-D numpy arrays): the sky coordiantes of the
+        catalog, with r in Mpc/h and ra and dec in degrees
     '''
     c1  = cs.T[0]
     c2  = cs.T[1]
@@ -47,6 +57,17 @@ def toSky(cs):
 def toCoord(r,ra,dec):
     '''
     Convert sky coordinates to Cartesian coordinates
+    
+    params:
+    ----------------------------------------------------------
+    r, ra, dec (1-D numpy arrays): the sky coordiantes of the
+        catalog, with r in Mpc/h and ra and dec in degrees
+        
+    returns:
+    ------------------------------------------------
+    c1, c2, c3 (1-D numpy arrays): The cartesian coordinates 
+        of the catalog in Mpc/h
+    
     '''
     c1 = r*np.cos(ra*D2R)*np.cos(dec*D2R)
     c2 = r*np.sin(ra*D2R)*np.cos(dec*D2R)
@@ -58,14 +79,50 @@ def toCoord(r,ra,dec):
 
 
 class VoidMapVF():
+    """
+    Class used for plotting VoidFinder void catalogs
+    """
+    
 
-    def __init__(self,gdata,vfdata,vfdata2):
-        self.load_data(gdata,vfdata,vfdata2)
+    def __init__(self, gdata, maximals, holes):
+        """
+        Initialize the VoidMapVF class with void catalog data
+        
+        params:
+        ----------------------------------------------------------
+        gdata (numpy array): the galaxy data. Should contain 
+            either sky coordiantes ("r", "ra", "dec") or cartesian
+            cooridnates ("x", "y", "z"). May optionally contain 
+            galaxy magnitudes ("rabsmag").
+            
+        maximals (numpy array): the voidfinder maximals sphere 
+            table. Should be loaded with lowercase column names.
+            
+        holes (numpy array): the voidfinder holes table. Should be 
+            loaded with lowercase column names.
+        """
+        self.load_data(gdata,maximals,holes)
 
-    def load_data(self,gdata,vfdata,vfdata2):
+    def load_data(self,gdata,maximals,holes):
+        """
+        Load void catalog data for plotting
+        
+        params:
+        ----------------------------------------------------------
+        gdata (numpy array): the galaxy data. Should contain 
+            either sky coordiantes ("r", "ra", "dec") or cartesian
+            cooridnates ("x", "y", "z"). May optionally contain 
+            galaxy magnitudes ("rabsmag").
+            
+        maximals (numpy array): the voidfinder maximals sphere 
+            table. Should be loaded with lowercase column names.
+            
+        holes (numpy array): the voidfinder holes table. Should be 
+            loaded with lowercase column names.
+        """   
         self.gdata=gdata
-        self.vfdata=vfdata
-        self.vfdata2=vfdata2
+        self.maximals=maximals
+        self.holes=holes
         #making the data from galaxies more accessible/easier to manipulate?
         if np.isin('rabsmag', gdata.colnames):
             self.rmag = gdata['rabsmag']
@@ -93,26 +150,26 @@ class VoidMapVF():
         self.kdt = cKDTree(np.array([self.gx,self.gy,self.gz]).T)
 
         #Simplifying VoidFinder maximal sphere coordinates and converting them into RA,DEC,DIS
-        self.vfx = vfdata['x'] 
-        self.vfy = vfdata['y']
-        self.vfz = vfdata['z']
+        self.vfx = maximals['x'] 
+        self.vfy = maximals['y']
+        self.vfz = maximals['z']
         self.vfr,self.vfra,self.vfdec = toSky(np.array([self.vfx,self.vfy,self.vfz]).T)
-        self.vfrad = vfdata['radius']
-        self.vfedge = vfdata['edge']
+        self.vfrad = maximals['radius']
+        self.vfedge = maximals['edge']
 
         #Not sure what's going on here
-        self.vfc  = matplotlib.cm.nipy_spectral(np.linspace(0,1,len(self.vfr)))
-        self.vfcc = np.random.choice(range(len(self.vfc)),len(self.vfc),replace=False)
+        #self.vfc  = matplotlib.cm.nipy_spectral(np.linspace(0,1,len(self.vfr)))
+        #self.vfcc = np.random.choice(range(len(self.vfc)),len(self.vfc),replace=False)
 
         #Same coordinate conversion, but for holes
-        self.vflag = vfdata2['void']
-        self.vfx2 = vfdata2['x']
-        self.vfy2 = vfdata2['y']
-        self.vfz2 = vfdata2['z']
+        self.vflag = holes['void']
+        self.vfx2 = holes['x']
+        self.vfy2 = holes['y']
+        self.vfz2 = holes['z']
         self.vfr1,self.vfra1,self.vfdec1 = toSky(np.array([self.vfx2,self.vfy2,self.vfz2]).T)
-        self.vfrad1 = vfdata2['radius']
+        self.vfrad1 = holes['radius']
 
-        #matches holes to voids, and then matches galaxies within and outside of voids.
+        #group hole coordinates based on their void IDs
         self.vfx4   = [self.vfx2[self.vflag==vfl] for vfl in np.unique(self.vflag)]
         self.vfy4   = [self.vfy2[self.vflag==vfl] for vfl in np.unique(self.vflag)]
         self.vfz4   = [self.vfz2[self.vflag==vfl] for vfl in np.unique(self.vflag)]
@@ -121,12 +178,9 @@ class VoidMapVF():
         self.vfdec2 = [self.vfdec1[self.vflag==vfl] for vfl in np.unique(self.vflag)]
         self.vfrad2 = [self.vfrad1[self.vflag==vfl] for vfl in np.unique(self.vflag)]
 
-        #Unsure, creating empty arrays with the same length as the number of voids 
-        #(Specifically using the x coordinate)
-        #unsure of purpose, currently
+        #Determine which galaxies are inside voids
         self.gflag_vf = np.zeros(len(self.gx),dtype=bool)
 
-        #VoidFinder - Finding all the points within a given radius of a specific point
         for vfl in np.unique(self.vflag):
             self.vfx3 = self.vfx2[self.vflag==vfl]
             self.vfy3 = self.vfy2[self.vflag==vfl]
@@ -136,32 +190,49 @@ class VoidMapVF():
                 galinds = self.kdt.query_ball_point([self.vfx3[i],self.vfy3[i],self.vfz3[i]],self.vfrad3[i])
                 self.gflag_vf[galinds] = True
 
-        #Marking wall galaxies as true
+        #Determine which galaxies are outside voids
         self.wflag_vf = (1-self.gflag_vf).astype(bool)
 
 
 
     def cint2(self, dec):
         '''
-        Calculate radii of hole-slice intersections
+        Calculate radii of hole-slice intersections for survey 
+        geometry
+        
+        params:
+        ----------------------------------------------------------
+        dec (float): the declianation of the cross-secitonal plane
         '''
         cr = []
+        #loop through voids
         for i in range(len(self.vfr2)):
             cr.append([])
+            #loop through hoels in current void
             for j in range(len(self.vfr2[i])):
                 
+                #distance between hole center and plane
                 dtd = np.abs(self.vfr2[i][j]*np.sin((self.vfdec2[i][j]-dec)*D2R))
+                #case that hole does intersect plane
                 if dtd>self.vfrad2[i][j]:
                     cr[i].append(0.)
+                #case that hole does intersect plane 
                 else:
+                    #add intersetion radius
                     cr[i].append(np.sqrt(self.vfrad2[i][j]**2.-dtd**2.))
         return cr
     
     def cint2xyz(self, plane_height, vfn4):
         '''
-        Calculate radii of hole-slice intersections
-        plane_height (float): height plane in the x, y or z direction
-        vfn4 (list): one of self.vfx4, self.vfy4, or self.vfz4, corresponding to plane_height
+        Calculate radii of hole-slice intersections for cubic
+        box geometry
+        
+        params:
+        ----------------------------------------------------------
+        plane_height (float): the height cross-secitonal plane
+        
+        vfn4 (list): one of self.vfx4, self.vfy4, or self.vfz4, 
+            corresponding to the dimension of the cross-section
         '''
 
         #list of <list of radii of hole-plane intersections> for each void
@@ -173,9 +244,12 @@ class VoidMapVF():
             for j in range(len(self.vfr2[i])):
                 #minimum distance from hole center to the plane
                 dtd = np.abs(vfn4[i][j] - plane_height)
+                #case that hole doesn't intersect plane
                 if dtd>self.vfrad2[i][j]:
                     cr[i].append(0.)
+                #case that hole does intersect plane
                 else:
+                    #add inters
                     cr[i].append(np.sqrt(self.vfrad2[i][j]**2.-dtd**2.))
         return cr
 
@@ -240,14 +314,91 @@ class VoidMapVF():
 
     # Plot VoidFinder Voids (Version 2)
     def pvf2(self,dec,wdth,npc,chkdpth, 
-    ra0, ra1, cz0, cz1, title, graph = None, zlimits = True, rot = 0, 
-    colors = ["blue","blue","blue"], gal_colors = ["black","red"], include_gals=True, include_voids=True, alpha=0.2, border_alpha = 1,
-    horiz_legend_offset=.8, plot_sdss = True, sdss_lim=332.38626, sdss_color='magenta', 
-             mag_limit = None, galaxy_point_size = 1):
+             ra0, ra1, cz0, cz1, title, graph = None, zlimits = True, rot = 0, 
+             colors = ["blue","blue","blue"], gal_colors = ["black","red"], include_gals=True, include_voids=True, alpha=0.2, border_alpha = 1,
+             horiz_legend_offset=.8, plot_sdss = True, sdss_lim=332.38626, sdss_color='magenta', 
+             mag_limit = None, galaxy_point_size = 1, return_plot_data=False):
         '''
         Plot VoidFinder voids
+        
+        params:
+        ----------------------------------------------------------
         dec (float): declination of slice
-        wdth (float): Distance from declination plane in Mpc/h within which galaxies are plotted
+        
+        wdth (float): Distance from declination plane in Mpc/h 
+            within which galaxies are plotted
+            
+        npc ():
+        
+        chkdpth ():
+        
+        ra0 (float): the minimum ra corresponding the leftmost 
+            plot boundary
+        
+        ra1 (float): the maximum ra corresponding the rightmost 
+            plot boundary
+            
+        cz0 (float): the minimum distance corresponding the inner 
+            plot boundary. Given as a redshift if zlimit = True, 
+            otherwise given in Mpc/h
+        
+        cz1 (float): the maximum distance corresponding the outer 
+            plot boundary. Given as a redshift if zlimit = True, 
+            otherwise given in Mpc/h
+            
+        title (string): the plot title
+        
+        graph (list): list containing a pyplot figure (graph[0]), 
+            a floating_axes.FloatingSubplot object (graph[1]), 
+            and floating subplot axes given by
+            floating_axes.FloatingSubplot.get_aux_axes (graph[2]).
+            Used for plotting voids over an already existing plot.
+            Defaults to none.
+        
+        zlimits (bool): if True, the distance limits (cz0, cz1) are 
+            given as redshifts. Otherwise, they are given in Mpc/h.
+            Defaults to True.
+            
+        rot (float): The rotation of the plot. Changes teh relative 
+            positions of the ra values.
+            
+        colors (list): a three element list of strings specifying 
+            matplotlib colors for plotting edge voids (colors[0]), 
+            near-edge voids (colors[1]), and interior voids 
+            (colors[2]). Defaults to ["blue","blue","blue"]
+            
+        gal_colors (list): a two element list of strings specifying 
+            matplotlib colors for plotting wall galaxies 
+            (gal_colors[0]) and void galaxies (gal_colors[1])
+            
+        include_gals (bool): Demtermines if galaxies are plotted
+        
+        include_voids (bool): Demtermines if voids are plotted
+        
+        alpha (float): The alpha value for the filled interiors of 
+            the plotted voids
+            
+        border_alpha: the alpha value for the borders of the
+            plotted voids
+            
+        horiz_legend_offset (float): the horizontal positioning of 
+            the graph legend.
+            
+        plot_sdss (bool): Determines if the SDSS DR7 void catalog
+            distance limit is plotted
+            
+        sdss_lim (float): SDSS DR7 void catalog distance limit 
+        
+        sdss_color (string): The color used to plot the SDSS DR7 
+            void catalog distance limit 
+        
+        mag_limit (float): The magnitude limit used for selecting 
+            plotted galaxies. Defaults to None, in which case all
+            galaxies are plotted
+            
+        galaxy_point_size (float): The size of the markers for the
+            plotted galaxies
+        
         '''
         if zlimits:
             cz0 = z_to_comoving_dist(np.array([cz0],dtype=np.float32),.315,1)[0]
@@ -263,6 +414,9 @@ class VoidMapVF():
             plt.title(f"{title} $\delta$ = {dec}$^\circ$", loc='left',)
         else:
             fig, ax3, aux_ax3 = graph[0], graph[1], graph[2]
+            
+        if return_plot_data:
+            plot_data = []
         
         if include_voids:
             Cr = self.cint2(dec)
@@ -284,6 +438,9 @@ class VoidMapVF():
 
                     aux_ax3.plot(Cra2, Cr2, color=vcolor, alpha = border_alpha)
                     aux_ax3.fill(Cra2, Cr2, color=vcolor, alpha=alpha)
+                    
+                    if return_plot_data:
+                        plot_data.append([Cra2, Cr2])
                 
 
             #Cr2,Cra2 = gcp3(vfx4[i],vfy4[i],vfz4[i],vfr2[i],vfrad2[i],vfdec2[i],dec,npc,chkdpth)
@@ -300,14 +457,18 @@ class VoidMapVF():
             if mag_limit is not None:
                 gdcut = gdcut * self.rmag[self.wflag_vf] < mag_limit
             aux_ax3.scatter(self.gra[self.wflag_vf][gdcut], self.gr[self.wflag_vf][gdcut], color=gal_colors[0], s=galaxy_point_size, edgecolor=None)
-
+            
+            if return_plot_data:
+                plot_data.append([self.gra[self.wflag_vf][gdcut], self.gr[self.wflag_vf][gdcut]])
+                
             # Void galaxies
             gdcut = (self.gr[self.gflag_vf]*np.sin((self.gdec[self.gflag_vf] - dec)*D2R))**2. < wdth**2.
             if mag_limit is not None:
                 gdcut = gdcut * self.rmag[self.gflag_vf] < mag_limit
             aux_ax3.scatter(self.gra[self.gflag_vf][gdcut], self.gr[self.gflag_vf][gdcut], color=gal_colors[1], s=galaxy_point_size, edgecolor=None)
-
-            #survey_title = ["Uchuu Blue Control","Uchuu Blue Cut","Uchuu Red Control","Uchuu Red Cut"][survey_index]
+            
+            if return_plot_data:
+                plot_data.append([self.gra[self.gflag_vf][gdcut], self.gr[self.gflag_vf][gdcut]])
         
         if plot_sdss:
             cc=plt.Circle((0, 0), sdss_lim, color=sdss_color,fill=False,linewidth=3)
@@ -355,13 +516,16 @@ class VoidMapVF():
         aux_ax3.legend(handles=void_legend_handles, loc="upper left", bbox_to_anchor=(horiz_legend_offset,1))
         
         self.graph = [fig, ax3, aux_ax3]
+        
+        if return_plot_data:
+            return self.graph, plot_data
 
         return self.graph
     
     # Plot VoidFinder Voids from a Cubic Simulation (Version 2)
     def pvf2xyz(self,plane_height,wdth,npc,chkdpth, 
-        title, h="x",v="y",n="z", h_range = (0,50), v_range = (0,50), graph = None, 
-        colors = ["blue","blue","blue"],gal_colors = ["black","red"],include_gals=True,alpha=0.2, border_alpha = 1,scale=1):
+                title, h="x",v="y",n="z", h_range = (0,50), v_range = (0,50), graph = None, 
+                colors = ["blue","blue","blue"],gal_colors = ["black","red"],include_gals=True,alpha=0.2, border_alpha = 1,scale=1):
             '''
             Plot VoidFinder voids
             '''
@@ -388,7 +552,7 @@ class VoidMapVF():
                 
                 ax.set_aspect('equal', adjustable='box')
 
-                plt.title(f"{title} ${n}$ = {plane_height} [Mpc/h]")
+                plt.title(f"{title} ${n}$ = {plane_height} [Mpc h$^{-1}$]")
             else:
                 fig, ax = graph[0], graph[1]
 
@@ -436,18 +600,66 @@ class VoidMapVF():
 
 
 class VoidMapV2():
+    """
+    Class for plotting V2 voids
+    """
 
     def __init__(self,tridata, gzdata, zvdata, zbdata, gdata, edge_threshold = 0.1):
+        """
+        Initialize the VoidMapV2 class with void catalog data
+        
+        params:
+        ----------------------------------------------------------
+        tridata (numpy array): the V2 triangles table. Should be 
+            loaded with lowercase column names.
+            
+        gzdata (numpy array): the V2 galzones table. Should be 
+            loaded with lowercase column names.
+            
+        zvdata (numpy array): the V2 zonevoids table. Should be 
+            loaded with lowercase column names.
+            
+        zbdata (numpy array): the V2 zobovoids table. Should be 
+            loaded with lowercase column names.
+            
+        gdata (numpy array): the galaxy data. Should contain 
+            either sky coordiantes ("r", "ra", "dec") or 
+            cartesian cooridnates ("x", "y", "z"). May optionally 
+            contain galaxy magnitudes ("rabsmag")
+            
+        edge_threshold (float): the threshold ratio of 
+            edge_area/surface_area above which V2 voids are 
+            considered edge voids. Defaults to 0.1
+        
+        """   
         self.load_data(tridata, gzdata, zvdata, zbdata, gdata, edge_threshold)
 
     def load_data(self, tridata, gzdata, zvdata, zbdata, gdata, edge_threshold):
         '''
-        # Vsquared triangle output
-        tridata = Table.read("DR7_triangles.dat",format='ascii.commented_header')
-        gzdata = Table.read("DR7_galzones.dat",format='ascii.commented_header')
-        zvdata = Table.read("DR7_zonevoids.dat",format='ascii.commented_header')
-        zbdata = Table.read("DR7_zobovoids.dat",format='ascii.commented_header')
-        gdata = Table.read("../galaxy_catalog/DR7.txt",format="ascii.commented_header") #galaxies
+        Load void catalog data for plotting
+        
+        params:
+        ----------------------------------------------------------
+        tridata (numpy array): the V2 triangles table. Should be 
+            loaded with lowercase column names.
+            
+        gzdata (numpy array): the V2 galzones table. Should be 
+            loaded with lowercase column names.
+            
+        zvdata (numpy array): the V2 zonevoids table. Should be 
+            loaded with lowercase column names.
+            
+        zbdata (numpy array): the V2 zobovoids table. Should be 
+            loaded with lowercase column names.
+            
+        gdata (numpy array): the galaxy data. Should contain 
+            either sky coordiantes ("r", "ra", "dec") or 
+            cartesian cooridnates ("x", "y", "z"). May optionally 
+            contain galaxy magnitudes ("rabsmag")
+            
+        edge_threshold (float): the threshold ratio of 
+            edge_area/surface_area above which V2 voids are 
+            considered edge voids. Defaults to 0.1
         '''
         
 
@@ -504,16 +716,6 @@ class VoidMapV2():
 
         self.tridat= tridata
         self.trivids = trivids
-        
-        """v2c  = matplotlib.cm.nipy_spectral(np.linspace(0,1,np.amax(trivids)+1))
-        v2cc = np.random.choice(range(len(v2c)),len(v2c),replace=False)
-
-        
-        self.v2c = v2c
-        self.v2cc = v2cc"""
-
-
-
 
 
     def getinx(self, xx,aa,yy,bb,zz,cc,dd):
@@ -677,12 +879,91 @@ class VoidMapV2():
 
     #Plot Zobov Voids
     def pzbv(self,dec,wdth,
-    ra0, ra1, cz0, cz1, title, graph = None, zlimits = True, rot = 0, 
-    colors = ["blue","blue"],include_gals=True,alpha=0.2, border_alpha = 1,
-    horiz_legend_offset=.8, plot_sdss = True, sdss_lim=332.38626, sdss_color='magenta'
-             , mag_limit = None, galaxy_point_size=1):
+             ra0, ra1, cz0, cz1, title, graph = None, zlimits = True, rot = 0, 
+             colors = ["blue","blue"],include_gals=True,alpha=0.2, border_alpha = 1,
+             horiz_legend_offset=.8, plot_sdss = True, sdss_lim=332.38626, sdss_color='magenta', 
+             mag_limit = None, galaxy_point_size=1, return_plot_data=False):
         '''
         Plot Vsquared voids
+        
+        params:
+        ----------------------------------------------------------
+        dec (float): declination of slice
+        
+        wdth (float): Distance from declination plane in Mpc/h 
+            within which galaxies are plotted
+            
+        npc ():
+        
+        chkdpth ():
+        
+        ra0 (float): the minimum ra corresponding the leftmost 
+            plot boundary
+        
+        ra1 (float): the maximum ra corresponding the rightmost 
+            plot boundary
+            
+        cz0 (float): the minimum distance corresponding the inner 
+            plot boundary. Given as a redshift if zlimit = True, 
+            otherwise given in Mpc/h
+        
+        cz1 (float): the maximum distance corresponding the outer 
+            plot boundary. Given as a redshift if zlimit = True, 
+            otherwise given in Mpc/h
+            
+        title (string): the plot title
+        
+        graph (list): list containing a pyplot figure (graph[0]), 
+            a floating_axes.FloatingSubplot object (graph[1]), 
+            and floating subplot axes given by
+            floating_axes.FloatingSubplot.get_aux_axes (graph[2]).
+            Used for plotting voids over an already existing plot.
+            Defaults to none.
+        
+        zlimits (bool): if True, the distance limits (cz0, cz1) are 
+            given as redshifts. Otherwise, they are given in Mpc/h.
+            Defaults to True.
+            
+        rot (float): The rotation of the plot. Changes teh relative 
+            positions of the ra values.
+            
+        colors (list): a three element list of strings specifying 
+            matplotlib colors for plotting edge voids (colors[0]), 
+            near-edge voids (colors[1]), and interior voids 
+            (colors[2]). Defaults to ["blue","blue","blue"]
+            
+        gal_colors (list): a two element list of strings specifying 
+            matplotlib colors for plotting wall galaxies 
+            (gal_colors[0]) and void galaxies (gal_colors[1])
+            
+        include_gals (bool): Demtermines if galaxies are plotted
+        
+        include_voids (bool): Demtermines if voids are plotted
+        
+        alpha (float): The alpha value for the filled interiors of 
+            the plotted voids
+            
+        border_alpha: the alpha value for the borders of the
+            plotted voids
+            
+        horiz_legend_offset (float): the horizontal positioning of 
+            the graph legend.
+            
+        plot_sdss (bool): Determines if the SDSS DR7 void catalog
+            distance limit is plotted
+            
+        sdss_lim (float): SDSS DR7 void catalog distance limit 
+        
+        sdss_color (string): The color used to plot the SDSS DR7 
+            void catalog distance limit 
+        
+        mag_limit (float): The magnitude limit used for selecting 
+            plotted galaxies. Defaults to None, in which case all
+            galaxies are plotted
+            
+        galaxy_point_size (float): The size of the markers for the
+            plotted galaxies
+        
         '''
         #set up axes
         #----------------
@@ -700,6 +981,10 @@ class VoidMapV2():
             plt.title(f"{title} $\delta$ = {dec}$^\circ$", loc='left')
         else:
             fig, ax3, aux_ax3 = graph[0], graph[1], graph[2]
+        
+        if return_plot_data:
+            plot_data = []
+            
         # plot voids on axes
         #----------------
         Intr,Intra = self.trint2(dec)
@@ -719,6 +1004,9 @@ class VoidMapV2():
                     color = colors[0] if self.edge[i]==1 else colors[1]
                     aux_ax3.plot(Intra2[j],Intr2[j],alpha=border_alpha,color=color)
                     aux_ax3.fill(Intra2[j],Intr2[j],alpha=alpha,color=color)
+                    
+                    if return_plot_data:
+                        plot_data.append([Intra2[j],Intr2[j]])
                 #for j in range(len(Intr2)):
                 #    if Icut[j]:
                 #        aux_ax3.plot(Intra2[j],Intr2[j],color='blue')
@@ -730,11 +1018,16 @@ class VoidMapV2():
             if mag_limit is not None:
                 gdcut = gdcut * self.rmag[wflag_v2] < mag_limit
             aux_ax3.scatter(gra[wflag_v2][gdcut],gr[wflag_v2][gdcut],color='k',s=galaxy_point_size, edgecolor=None)
+            if return_plot_data:
+                plot_data.append([gra[wflag_v2][gdcut],gr[wflag_v2][gdcut]])
+                
             gdcut = (gr[gflag_v2]*np.sin((gdec[gflag_v2]-dec)*D2R))**2.<wdth**2.
             if mag_limit is not None:
                 gdcut = gdcut * self.rmag[gflag_v2] < mag_limit
             aux_ax3.scatter(gra[gflag_v2][gdcut],gr[gflag_v2][gdcut],color='red',s=galaxy_point_size, edgecolor=None)
-            
+            if return_plot_data:
+                plot_data.append([gra[gflag_v2][gdcut],gr[gflag_v2][gdcut]])
+                
         if plot_sdss:
             cc=plt.Circle((0, 0), sdss_lim, color=sdss_color,fill=False,linewidth=3)
             ax3.add_artist( cc )
@@ -774,6 +1067,9 @@ class VoidMapV2():
         
         self.graph = [fig, ax3, aux_ax3]
 
+        if return_plot_data:
+            return self.graph, plot_data
+        
         return self.graph
 
 
@@ -819,7 +1115,7 @@ def setup_axes3(fig, rect, ra0, ra1, cz0, cz1, rot):
     ax1.axis["top"].major_ticklabels.set_axis_direction("top")
     ax1.axis["top"].label.set_axis_direction("top")
 
-    ax1.axis["left"].label.set_text(r"r [Mpc/h]")
+    ax1.axis["left"].label.set_text(r"r [Mpc h$^{-1}$]")
     ax1.axis["top"].label.set_text(r"$\alpha$")
 
     #print(ax1.axis["top"].major_ticklabels._grid_info)

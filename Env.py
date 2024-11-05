@@ -1,4 +1,11 @@
-'''Identify galaxies as being in a void, a wall, or an alternate classification.'''
+'''
+
+THIS CODE IS SCHEDULED FOR DELETION. MADE OBSOLETE BY VoidCatalog.py
+
+Identify galaxies as being in a void, a wall, or an alternate classification.
+
+
+'''
 
 
 ################################################################################
