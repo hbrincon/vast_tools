@@ -22,12 +22,15 @@ import ShellVolumeMaskedPython as svm
 Authors: Hernan Rincon
 
 """
+
+# Void catalog classes designed for loading VAST void catalogs and performing analysis
    
 c = 3e5 # km/s
 
 DtoR = np.pi/180
 
 class VoidCatalog():
+    # base class for void catalogs
     
     def __init__(self, edge_buffer):
         self.edge_buffer = edge_buffer
@@ -176,6 +179,7 @@ class VoidCatalog():
                 
 
 class VoidFinderCatalog (VoidCatalog):
+    # Class for VoidFinder catalogs
     
     def __init__ (self, file_name, survey_name=None, directory = './', edge_buffer=30):
         
@@ -593,6 +597,7 @@ class VoidFinderCatalog (VoidCatalog):
         
 
 class V2Catalog(VoidCatalog):
+    # Class for V2 catalogs
     
     def __init__(self, file_name, survey_name=None, pruning = 'VIDE', directory = './', edge_buffer=30):
         
@@ -791,6 +796,9 @@ class V2Catalog(VoidCatalog):
 
 
 class VoidCatalogStacked ():
+    
+    # base class for loading multiple void catalogs at once 
+    # (such as for surveys with mutliple contiguous footprints)
 
     def __init__ (self, edge_buffer):
         self.edge_buffer=edge_buffer
@@ -839,6 +847,9 @@ class VoidCatalogStacked ():
         return res
     
 class VoidFinderCatalogStacked (VoidCatalogStacked):
+    
+    # Class for loading multiple VoidFinder catalogs at once 
+    # (such as for surveys with mutliple contiguous footprints)
 
     def __init__ (self, cat_names, file_names, survey_names=None, directory = './', capitalize_colnames = False, edge_buffer=30):
     
@@ -917,6 +928,8 @@ class VoidFinderCatalogStacked (VoidCatalogStacked):
             
         
 class V2CatalogStacked (VoidCatalogStacked):
+    # Class for loading multiple V2 catalogs at once 
+    # (such as for surveys with mutliple contiguous footprints)
 
     def __init__ (self, cat_names, file_names, survey_names=None,  pruning = 'VIDE', directory = './', edge_buffer=30):
         
@@ -1100,7 +1113,8 @@ def combine_overlaps(overlaps, do_print=True, do_return=True):
     
     if do_return:
         return (n_V1_V2/n_points, (n_V1_V2+n_V1_not_V2)/n_points, (n_V1_V2+n_V2_not_V1)/n_points, n_points )
-    
+   
+#function still in development
 def void_size_spectrum(catalog, save_every=None):
     
     gals = catalog.galaxies

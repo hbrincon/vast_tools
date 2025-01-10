@@ -23,14 +23,13 @@ from astropy.cosmology import w0waCDM, FlatLambdaCDM
 import matplotlib.pyplot as plt
 from vast.voidfinder.postprocessing import mknum
 
-# Goals:
-# implement revisions in stickies for final output
-
 """
 Authors: Hernan Rincon
 
 Some code has been adopted from the following individuals: Dahlia Veyrat
 """
+
+#code still in development, errors may occur when used
 
 #class for fitting the void size function to void spectrum data
 class VoSS_Fit ():
