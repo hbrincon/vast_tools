@@ -1,6 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import chi2
+from astropy.cosmology import FlatLambdaCDM
+
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: Segev BenZvi
+"""
 
 def poisson_central_interval(x, width):
     """
@@ -133,3 +140,26 @@ def histogram(data, domain, bins, normalize = False, fill_alpha=.35,
         plt.fill_between(centers, error[1], error[0], alpha=fill_alpha)
     else:
         plt.fill_between(centers, error[1], error[0], alpha=fill_alpha, **fill_kwargs)
+        
+        
+def n_of_z(data, domain, bins, sky_fraction, is_redshift = True, kwargs=None):
+    
+    model = FlatLambdaCDM(H0=100, Om0=.315)
+    
+    if type(bins) is int:
+        bins = np.linspace(domain[0], domain[1], bins)
+    
+    if is_redshift:
+        comov_bins = model.comoving_distance(bins)
+    else:
+        comov_bins = bins
+        
+    weights = 1 / (sky_fraction * 4/3 * np.pi * np.diff(comov_bins**3))
+    
+    weights = np.array(weights)
+
+    if kwargs is None:
+        histogram(data, domain, bins, bin_weights = weights)
+    else:
+        histogram(data, domain, bins, bin_weights = weights, **kwargs)
+    

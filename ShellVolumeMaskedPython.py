@@ -22,6 +22,14 @@ from vast.voidfinder.volume_cut import build_unit_sphere_points, generate_mesh
 
 import time
 
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: Steve O'Neil
+"""
+
+# This code calculates the percentage of a sphereical shell's volume that is located within 
+# a survey mask (such as an angular mask + redshift limits)
 
 
 def shell_fraction(

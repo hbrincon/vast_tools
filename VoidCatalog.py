@@ -18,9 +18,10 @@ import VoidSWRadii as vswr
 import SurveyVolume as sv
 import ShellVolumeMaskedPython as svm
 
-# TODO: alllow for custom edge fbuffer (currently set to 30Mpc/h in VoidOverlap.py)
+"""
+Authors: Hernan Rincon
 
-
+"""
    
 c = 3e5 # km/s
 
@@ -28,8 +29,8 @@ DtoR = np.pi/180
 
 class VoidCatalog():
     
-    def __init__(self):
-        pass
+    def __init__(self, edge_buffer):
+        self.edge_buffer = edge_buffer
     
     def __getitem__(self, table):
         return self.tables[str.upper(table)]
@@ -102,6 +103,9 @@ class VoidCatalog():
                 self.galaxies[y_name].name = 'y'
             if z_name != 'z':
                 self.galaxies[z_name].name = 'z'
+            
+            #temporary fix for any caclulation requireing Rgal (there shouldreally be no such caclualtions for the cartesian case)   
+            #self.galaxies['Rgal'] = np.sqrt(self.galaxies['x']**2 + self.galaxies['y']**2 + self.galaxies['z']**2)
         else: 
             if redshift_name != 'redshift':
                 self.galaxies[redshift_name].name = 'redshift'
@@ -109,6 +113,7 @@ class VoidCatalog():
                 self.galaxies[ra_name].name = 'ra'
             if dec_name != 'dec':
                 self.galaxies[dec_name].name = 'dec'
+                
 
             if np.sum(~np.isin(['x','y','z','Rgal'], self.galaxies.colnames)) > 0:
 
@@ -164,7 +169,7 @@ class VoidCatalog():
                                           V1_algorithm=cat_type, 
                                           mask_tuple=(mask.astype(bool), mask_res)
                                          )
-        vosc.find_overlap()
+        vosc.find_overlap(self.edge_buffer)
 
         return vosc.report(do_print=False, do_return=True)
     
@@ -172,7 +177,9 @@ class VoidCatalog():
 
 class VoidFinderCatalog (VoidCatalog):
     
-    def __init__ (self, file_name, survey_name=None, directory = './'):
+    def __init__ (self, file_name, survey_name=None, directory = './', edge_buffer=30):
+        
+        super().__init__(edge_buffer)
         
         # format input file name
         if file_name is None:
@@ -272,7 +279,7 @@ class VoidFinderCatalog (VoidCatalog):
                 curr_pt = self.maximals[i]
 
                 is_edge = vo.is_edge_point(curr_pt['x'], curr_pt['y'], curr_pt['z'],
-                                           mask, mask_res, rmin, rmax)
+                                           mask, mask_res, rmin, rmax, self.edge_buffer)
                 points_boolean[i] = not is_edge
 
             maximals = self.maximals[points_boolean]
@@ -417,10 +424,59 @@ class VoidFinderCatalog (VoidCatalog):
         if self.capitalize_colnames:
             self.lower_col_names()
             
+    def plot_vflag(self, mask_title='Survey Mask', galaxies_title='Galaxy Distribution', file_prefix='vast', save_image = False):
+        """
+        Creates an output plot of (1) the mask and (2) the galaxies partitioned into 
+        void/wall/other types in ra-dec coordinates
+
+        Parameters:
+        mask_title: string
+            The mask plot title
+        galaxies_title: string
+            The galaxies plot title
+        file_prefix: string
+            A name that is attached to the output png files to identify them
+        """
         
+        print('WARNING: ensure that the calcualted vflags match the currently loaded galaxy file, as vflags are saved to the void file and not the galaxy file.')
+        
+        if not hasattr(self, 'vflag'):
+            raise ValueError('vflags not calculated for galaxies.')
+            
+        galaxies = self.galaxies
+        mask=self.mask
+        
+        #Save graphical information
+
+        #mask
+        plt.imshow(np.rot90(mask.astype(int)))
+        plt.xlabel("RA [pixels]")
+        plt.ylabel("Dec. [pixels]")
+        plt.title(mask_title)
+        if save_image:
+            plt.savefig(file_prefix + "_classify_env_mask.png",dpi=100,bbox_inches="tight")
+
+        #galaxy catagories
+        walls=np.where(self.vflag['vflag']==0)
+        voids=np.where(self.vflag['vflag']==1)
+        wall_gals=np.array(galaxies)[walls]
+        void_gals=np.array(galaxies)[voids]
+        plt.figure(dpi=100)
+        plt.scatter(galaxies['ra'],galaxies['dec'],s=.5,label="excluded")
+        plt.scatter(void_gals['ra'],void_gals['dec'],color='r',s=.5,label="voids")
+        plt.scatter(wall_gals['ra'],wall_gals['dec'],color='k',s=.5,label="walls")
+        plt.legend(loc="upper right")
+        plt.xlabel("RA")
+        plt.ylabel("Dec.")
+        plt.title(galaxies_title)
+        
+        if save_image:
+            plt.savefig(file_prefix + "_classify_env_gals.png",dpi=100,bbox_inches="tight")      
         
     def galaxy_membership(self, custom_mask_hdu=None, return_selector=False,
                          rmin = None, rmax = None, mag_lim = None):
+        
+        print('WARNING: ensure that the calcualted vflags match the currently loaded galaxy file, as vflags are saved to the void file and not the galaxy file.')
         
         if rmin is None:
             rmin = self.info['DLIML']
@@ -453,7 +509,7 @@ class VoidFinderCatalog (VoidCatalog):
             curr_pt = galaxies[i]
 
             is_edge = vo.is_edge_point(curr_pt['x'], curr_pt['y'], curr_pt['z'],
-                                       mask, mask_res, rmin, rmax)
+                                       mask, mask_res, rmin, rmax, self.edge_buffer)
             points_boolean[i] = not is_edge
         
         galaxies = galaxies[points_boolean]
@@ -538,7 +594,9 @@ class VoidFinderCatalog (VoidCatalog):
 
 class V2Catalog(VoidCatalog):
     
-    def __init__(self, file_name, survey_name=None, pruning = 'VIDE', directory = './'):
+    def __init__(self, file_name, survey_name=None, pruning = 'VIDE', directory = './', edge_buffer=30):
+        
+        super().__init__(edge_buffer)
         
         if file_name is None:
             file_name = directory + survey_name + f'_V2_{pruning}_Output.fits'
@@ -649,7 +707,7 @@ class V2Catalog(VoidCatalog):
             curr_pt = self.voids[i]
 
             is_edge = vo.is_edge_point(curr_pt['x'], curr_pt['y'], curr_pt['z'],
-                                       mask, mask_res, rmin, rmax)
+                                       mask, mask_res, rmin, rmax, self.edge_buffer)
             points_boolean[i] = not is_edge
 
         voids = self.voids[points_boolean]
@@ -700,7 +758,7 @@ class V2Catalog(VoidCatalog):
                 curr_pt = galaxies[i]
 
                 is_edge = vo.is_edge_point(curr_pt['x'], curr_pt['y'], curr_pt['z'],
-                                           mask, mask_res, rmin, rmax)
+                                           mask, mask_res, rmin, rmax, self.edge_buffer)
                 points_boolean[i] = not is_edge
 
 
@@ -734,8 +792,8 @@ class V2Catalog(VoidCatalog):
 
 class VoidCatalogStacked ():
 
-    def __init__ ():
-        pass
+    def __init__ (self, edge_buffer):
+        self.edge_buffer=edge_buffer
     
     def __getitem__(self, cat):
         return self._catalogs[cat]
@@ -760,7 +818,7 @@ class VoidCatalogStacked ():
         res = []
         
         for cat in self._catalogs:
-            res.append(self._catalogs[cat].get_single_overlap(mask_hdu))
+            res.append(self._catalogs[cat].get_single_overlap(mask_hdu, self.edge_buffer))
             
         return res
             
@@ -782,8 +840,9 @@ class VoidCatalogStacked ():
     
 class VoidFinderCatalogStacked (VoidCatalogStacked):
 
-    def __init__ (self, cat_names, file_names, survey_names=None, directory = './', capitalize_colnames = False):
+    def __init__ (self, cat_names, file_names, survey_names=None, directory = './', capitalize_colnames = False, edge_buffer=30):
     
+        super().__init__(edge_buffer)
          
         if file_names is None:
             file_names = [directory + name + '_VoidFinder_Output.fits' for name in survey_names]
@@ -811,7 +870,7 @@ class VoidFinderCatalogStacked (VoidCatalogStacked):
                 curr_pt = catalog.maximals[i]
 
                 is_edge = vo.is_edge_point(curr_pt['x'], curr_pt['y'], curr_pt['z'],
-                                           mask, mask_res, rmin, rmax)
+                                           mask, mask_res, rmin, rmax, self.edge_buffer)
                 points_boolean[i] = not is_edge
 
             return catalog.maximals[points_boolean]
@@ -859,7 +918,9 @@ class VoidFinderCatalogStacked (VoidCatalogStacked):
         
 class V2CatalogStacked (VoidCatalogStacked):
 
-    def __init__ (self, cat_names, file_names, survey_names=None,  pruning = 'VIDE', directory = './', shift_IDs = False):
+    def __init__ (self, cat_names, file_names, survey_names=None,  pruning = 'VIDE', directory = './', edge_buffer=30):
+        
+        super().__init__(edge_buffer)
         
         #format file names
         if file_names is None:
@@ -896,7 +957,7 @@ class V2CatalogStacked (VoidCatalogStacked):
                 curr_pt = catalog.voids[i]
 
                 is_edge = vo.is_edge_point(curr_pt['x'], curr_pt['y'], curr_pt['z'],
-                                           mask, mask_res, rmin, rmax)
+                                           mask, mask_res, rmin, rmax, self.edge_buffer)
                 points_boolean[i] = not is_edge
 
             return catalog.voids[points_boolean]
@@ -989,7 +1050,7 @@ def combined_galaxy_membership(catalog1, catalog2, custom_mask_hdu=None):
     
     return num_void, num_tot1
 
-def get_overlap(cat1, cat2, mask_hdu):
+def get_overlap(cat1, cat2, mask_hdu, edge_buffer):
     
     mask = mask_hdu.data.astype(bool) # convert from into to bool to avoid endian compiler error
     mask_res = mask_hdu.header['MSKRES']
@@ -1020,7 +1081,7 @@ def get_overlap(cat1, cat2, mask_hdu):
                                 V1_algorithm=cat1_type, V2_algorithm=cat2_type,
                                 mask_tuple=(mask.astype(bool), mask_res)
                                 )
-    vooc.find_overlap()
+    vooc.find_overlap(edge_buffer)
     return vooc.report(do_print=False, do_return=True)
 
 def combine_overlaps(overlaps, do_print=True, do_return=True):

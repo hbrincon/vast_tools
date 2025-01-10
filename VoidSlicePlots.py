@@ -24,7 +24,11 @@ from vast.voidfinder.voidfinder_functions import xyz_to_radecz
 
 #matplotlib.rcParams.update({'font.size': 38})
 
-#Code written originally by Dahlia Veyrat
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: Dahlia Veyrat
+"""
 
 D2R = np.pi/180.
 
@@ -404,10 +408,12 @@ class VoidMapVF():
             cz0 = z_to_comoving_dist(np.array([cz0],dtype=np.float32),.315,1)[0]
             cz1 = z_to_comoving_dist(np.array([cz1],dtype=np.float32),.315,1)[0]
 
+        set_bottom_invisible = False if cz0 > 0 else True #Don't illustrate the bottom axis if the redshift extends to 0
+
         if graph is None:
             fig = plt.figure(1, figsize=(1600/96,800/96))
 
-            ax3, aux_ax3 = setup_axes3(fig, 111, ra0, ra1, cz0, cz1, rot)
+            ax3, aux_ax3 = setup_axes3(fig, 111, ra0, ra1, cz0, cz1, rot, set_bottom_invisible)
 
             #aux_ax3.set_aspect(1) #This is causing errors
 
@@ -970,11 +976,13 @@ class VoidMapV2():
         if zlimits:
             cz0 = z_to_comoving_dist(np.array([cz0],dtype=np.float32),.315,1)[0]
             cz1 = z_to_comoving_dist(np.array([cz1],dtype=np.float32),.315,1)[0]
+
+        set_bottom_invisible = False if cz0 > 0 else True #Don't illustrate the bottom axis if the redshift extends to 0
             
         if graph is None:
             fig = plt.figure(1, figsize=(1600/96,800/96))
 
-            ax3, aux_ax3 = setup_axes3(fig, 111, ra0, ra1, cz0, cz1, rot)
+            ax3, aux_ax3 = setup_axes3(fig, 111, ra0, ra1, cz0, cz1, rot, set_bottom_invisible)
 
             #aux_ax3.set_aspect(1) #Not included in original V2 code?
 
@@ -1073,7 +1081,7 @@ class VoidMapV2():
         return self.graph
 
 
-def setup_axes3(fig, rect, ra0, ra1, cz0, cz1, rot):
+def setup_axes3(fig, rect, ra0, ra1, cz0, cz1, rot, set_bottom_invisible):
     """
     Sometimes, things like axis_direction need to be adjusted.
     """
@@ -1109,7 +1117,13 @@ def setup_axes3(fig, rect, ra0, ra1, cz0, cz1, rot):
     ax1.axis["left"].set_axis_direction("bottom")
     ax1.axis["right"].set_axis_direction("top")
 
-    ax1.axis["bottom"].set_visible(False)
+    if set_bottom_invisible:
+        ax1.axis["bottom"].set_visible(False)
+    else:
+        ax1.axis["bottom"].set_axis_direction("top")
+        #ax1.axis["bottom"].major_ticklabels.set_axis_direction("bottom") #This would duplicate the axes lables on the bottom
+        ax1.axis["bottom"].toggle(ticklabels=False)
+    
     ax1.axis["top"].set_axis_direction("bottom")
     ax1.axis["top"].toggle(ticklabels=True, label=True)
     ax1.axis["top"].major_ticklabels.set_axis_direction("top")

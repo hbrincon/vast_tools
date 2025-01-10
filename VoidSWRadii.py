@@ -1,11 +1,15 @@
-# Authors: Hernan Rincon, Dahlia Veyrat
-
 import numpy as np
 from scipy.spatial import cKDTree
 import healpy as hp
 import ShellVolumeMaskedPython as svm
 from scipy.interpolate import InterpolatedUnivariateSpline as int_uni_spl
 
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: Dahlia Veyrat
+
+"""
 
 def sky_fraction(gals, csm0, z_limit, min_maximal_radius=10.0, smooth_mask=True):
     #Calculates the fraction of the sky occupied by a survey

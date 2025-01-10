@@ -26,9 +26,15 @@ from vast.voidfinder.postprocessing import mknum
 # Goals:
 # implement revisions in stickies for final output
 
-#class for fitting teh void size function to void spectrum data
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: Dahlia Veyrat
+"""
+
+#class for fitting the void size function to void spectrum data
 class VoSS_Fit ():
-    def __init__(self, s8_mode = 'free', model = 'lambdaCDM'):
+    def __init__(self, s8_mode = 'free', B_mode='fixed', model = 'lambdaCDM'):
         """
         ---------------------------------------------------------------------------------------
         Creates a VoSS_Fit object.
@@ -50,7 +56,8 @@ class VoSS_Fit ():
         if model == 'bias':
             om_mode = 'fixed'
             s8_mode = 'fixed'
-            self.bias = VoSS_Parameter ('bias', 2, 1.5, 3, mode='free')
+            if B_mode == 'fixed':
+                self.bias = VoSS_Parameter ('bias', 2, 1.5, 3, mode='free')
         w0_mode = 'fixed'
         wa_mode = 'fixed'
         if model == 'wCDM':
@@ -60,19 +67,22 @@ class VoSS_Fit ():
             wa_mode = 'free'
         
         # set model parameters
-        self.om = VoSS_Parameter ('om', 0.3153, 0.1, 1-1e-3, mode=om_mode) #matter content
+        self.om = VoSS_Parameter ('om', 0.315, 0.1, 1-1e-3, mode=om_mode) #matter content
         self.omb = VoSS_Parameter ('omb', 0.0493, 1e-3, 0.1-1e-3) #baryon content
         self.h = VoSS_Parameter ('h', 0.6736, 0.5, 1) #reduced hubble parameter
         self.ns = VoSS_Parameter ('ns', 0.9649, 0.5, 1) #spectral index
-        self.a_s = VoSS_Parameter ('as', 2.1e-09, 1e-09, 3e-09) #scalar amplitude
+        self.a_s = VoSS_Parameter ('as', 2.083e-09, 1e-09, 3e-09) #scalar amplitude
         self.s8 = VoSS_Parameter ('s8', 0.8111, .5, 1.5, mode=s8_mode) #sigma_8
         self.tau = VoSS_Parameter ('tau', 0.0544, 0.01, 0.09) #optical depth to reionization
         self.w0 = VoSS_Parameter ('w0', -1, -2, 0, mode=w0_mode) # DEEoS 0th order expansion constant
         self.wa = VoSS_Parameter ('wa', 0, -3, 3, mode=wa_mode) # DEEoS first order expansion constant
+        self.slope = VoSS_Parameter('slope', 1, -5, 5, mode=B_mode)
+        self.intercept = VoSS_Parameter('intercept', 0, -5, 5, mode=B_mode)
         
         #dictionary of parameters
-        self.parameters = {'om':self.om, 'omb':self.omb, 'h':self.h, 'ns':self.ns, 'as':self.a_s, 's8':self.s8, 'tau':self.tau, 'w0':self.w0, 'wa':self.wa}
-        if model == 'bias':
+        self.parameters = {'om':self.om, 'omb':self.omb, 'h':self.h, 'ns':self.ns, 'as':self.a_s, 's8':self.s8, 
+                           'tau':self.tau, 'w0':self.w0, 'wa':self.wa, 'slope':self.slope, 'intercept':self.intercept}
+        if model == 'bias' and B_mode == 'fixed':
             self.parameters['bias'] = self.bias 
         
     def update_vsfobj(self, vsfobj):
@@ -113,12 +123,12 @@ class VoSS_Fit ():
         """
         
         #update the parameter
-        if name in ('om','omb','h','ns','as','s8','tau','w0','wa'):
+        if name in ('om','omb','h','ns','as','s8','tau','w0','wa', 'slope', 'intercept'):
             self.parameters[name] = VoSS_Parameter(name, fiducial_value, min_value, max_value, num_values, mode)
         else:
-            raise ValueError(f"The cosmological parameter must be one of 'om','omb','h','ns','as','s8','tau','w0', or 'wa'. The user input was '{name}'")
+            raise ValueError(f"The cosmological parameter must be one of 'om','omb','h','ns','as','s8','tau','w0','wa', 'slope', or 'intercept'. The user input was '{name}'")
     
-    def set_data (self, bin_counts, bin_edges, bin_volumes, z_centers, z_edges, bin_biases = None, bias_burnin = 500, bias_method = 'VoSS', bias_runID = None):
+    def set_data (self, bin_counts, bin_edges, bin_volumes, z_centers, z_edges, bin_biases = None, bias_burnin = 500, bias_method = 'VoSS', bias_mcmc_file = None):
         if not isinstance(bin_counts, np.ndarray):
             bin_counts = np.array(bin_counts)
         if len(bin_counts.shape) == 1:
@@ -152,9 +162,9 @@ class VoSS_Fit ():
                 bin_biases = np.array(bin_biases)
             self.bin_biases = bin_biases
             
-        elif os.path.isfile(f'mcmc_{bias_method}_bias_{bias_runID}.pickle'):
+        elif os.path.isfile(bias_mcmc_file):
             bin_biases = []
-            with open (f'mcmc_{bias_method}_bias_{bias_runID}.pickle','rb') as temp_infile:
+            with open (bias_mcmc_file,'rb') as temp_infile:
                 bias_dict = pickle.load(temp_infile)
             """if interpolate_bias:
                 z = []
@@ -229,7 +239,7 @@ class VoSS_Fit ():
         print(f'Evaluation of all points {num_points}/{num_points} are complete')
         
         #create interpolator for result
-        if self.model == 'bias':
+        if 'bias' in self.parameters.keys():
             
             #format 1D output
             values = np.array(values) #list to array
@@ -281,43 +291,48 @@ class VoSS_Fit ():
         return cosmology
     
     def plot_parameter_space_point(self, bin_index, parameter_space_point, coord_names, derive_s8, include_cbl = True, 
-                                   plot_data = True, plot_theory = True, data_kwargs = None, data_fill_kwargs = None, theory_kwargs = None, cbl_kwargs = None):
+                                   plot_data = True, plot_theory = True, data_kwargs = None, data_fill_kwargs = None, theory_kwargs = None, cbl_kwargs = None,
+                                  normalize=False):
         
         cosmology = self.get_cosmology()
 
-        vsf, s8 = self.evaluate_parameter_space_point(parameter_space_point, cosmology, coord_names, derive_s8, 'VoSS')
-        
+        if plot_theory:
+            vsf, s8 = self.evaluate_parameter_space_point(parameter_space_point, cosmology, coord_names, derive_s8, 'VoSS')
+            print('VoSS derived sigma_8 is ', s8)
+
         i = bin_index # rename for convenience
         
         z = self.z_centers[i]
         bias = self.bin_biases[i]
         
-        bin_log_widths = np.diff(np.log(self.bin_edges[i]))
-
-        print('VoSS derived sigma_8 is ', s8)
+        data_scale = 1
+        if normalize:
+            bin_log_widths = np.diff(np.log(self.bin_edges[i]))
+            volume = self.bin_volumes[i]
+            data_scale = 1 / volume / bin_log_widths
         
         #plot data
         if plot_data:
             
             bin_counts = self.bin_counts[i]
             uncert_low, uncert_high = hist.poisson_central_interval(bin_counts,.68)
-        
+            
             if data_kwargs is not None:
-                plt.plot(self.bin_centers[i], bin_counts, **data_kwargs) 
+                plt.plot(self.bin_centers[i], bin_counts * data_scale, **data_kwargs) 
             else:
-                plt.plot(self.bin_centers[i], bin_counts,color='purple') 
+                plt.plot(self.bin_centers[i], bin_counts * data_scale, color='purple') 
                 
             if data_fill_kwargs is not None:
-                plt.fill_between(self.bin_centers[i], uncert_high, uncert_low, **data_fill_kwargs)
+                plt.fill_between(self.bin_centers[i], uncert_high * data_scale, uncert_low * data_scale, **data_fill_kwargs)
             else:
-                plt.fill_between(self.bin_centers[i], uncert_high, uncert_low,alpha=.35,color='purple', label = 'Size spectrum')
+                plt.fill_between(self.bin_centers[i], uncert_high * data_scale, uncert_low * data_scale, alpha=.35,color='purple', label = 'Size spectrum')
 
         #plot theory VoSS
         if plot_theory:
             if theory_kwargs is not None:
-                plt.plot(self.bin_centers[i], vsf[i], **theory_kwargs)
+                plt.plot(self.bin_centers[i], vsf[i]*data_scale, **theory_kwargs)
             else:
-                plt.plot(self.bin_centers[i], vsf[i], color='k', alpha=0.5, label = 'VoSS VSF')
+                plt.plot(self.bin_centers[i], vsf[i]*data_scale, color='k', alpha=0.5, label = 'VoSS VSF')
         
         #report liklihood
         if plot_data and plot_theory:
@@ -330,9 +345,9 @@ class VoSS_Fit ():
             print('CBL derived sigma_8 is ', s8)
             
             if cbl_kwargs is not None:
-                plt.plot(self.bin_centers[i], vsf[i], **cbl_kwargs)
+                plt.plot(self.bin_centers[i], vsf[i]*data_scale, **cbl_kwargs)
             else:
-                plt.plot(self.bin_centers[i], vsf[i], color='r', linestyle=":", alpha=0.5, label = 'CBL VSF')
+                plt.plot(self.bin_centers[i], vsf[i]*data_scale, color='r', linestyle=":", alpha=0.5, label = 'CBL VSF')
                 
             if plot_data and include_cbl:    
                 print('CBL bin likelihood:',np.sum((bin_counts*np.log(vsf[i])) - vsf[i] - loggamma(bin_counts+1)))
@@ -365,7 +380,8 @@ class VoSS_Fit ():
         try:
             s8 = None if derive_s8 else parameters['s8']
             
-            bias = self.bin_biases if self.model != 'bias' else parameters['bias'] * np.ones_like(self.bin_biases)
+            fiducial_linear_bias = self.bin_biases if 'bias' not in parameters.keys() else parameters['bias'] * np.ones_like(self.bin_biases)
+            #bias = parameters['slope'] * bias + parameters['intercept']
             
             vsfobj = VoidSizeFunction()
             self.update_vsfobj(vsfobj)
@@ -373,8 +389,10 @@ class VoSS_Fit ():
             #calculated_s8, spectrum, vol_correction = self.vsfobj.spectrum(
             calculated_s8, spectrum, vol_correction = vsfobj.spectrum(
                     self.bin_centers, self.z_centers, self.z_edges,#shell radii and redshift sampling
-                    parameters['om'], parameters['w0'], parameters['wa'], parameters['h'], parameters['tau'] , parameters['omb'], parameters['ns'], parameters['as'], 
-                    bias, kmax=2, 
+                    parameters['om'], parameters['w0'], parameters['wa'], parameters['h'], parameters['tau'] , 
+                    parameters['omb'], parameters['ns'], parameters['as'],     
+                    fiducial_linear_bias, parameters['slope'], parameters['intercept'],
+                    delta_tr_v = -0.7, delta_c = 1.686, kmax=2, 
                     scale_to_bin = True, bin_edges = self.bin_edges,
                     get_sigma_8=derive_s8, sigma_8 = s8
                 )
@@ -395,8 +413,13 @@ class VoSS_Fit ():
     def evaluate_CBL(self, parameters, derive_s8):
         
             
-        biases = self.bin_biases if self.model != 'bias' else parameters['bias'] * np.ones_like(self.bin_biases)
-        
+        biases = self.bin_biases if 'bias' not in parameters.keys() else parameters['bias'] * np.ones_like(self.bin_biases)
+        biases = parameters['slope'] * biases + parameters['intercept']
+
+        # catch unphysical bias (DM overdensity = tracer underdenity or negative DM density)
+        if np.any(biases <= 0) or np.any(1 - .7 / biases <= 0):
+            return np.full(self.bin_centers.shape, np.inf), np.inf
+    
         # this info could be moved elsewhere so its not recalculated every funciton call
         cosm = cbl.Cosmology(cbl.CosmologicalModel__Planck18_)
         fiducial_global_shells = np.diff([cosm.D_C(redshift)**3 for redshift in self.z_edges])
@@ -439,7 +462,7 @@ class VoSS_Fit ():
             
             r_edges = self.bin_edges[i]
             log_bin_widths = np.diff(np.log(r_edges * vol_correction))
-
+            #note: if this crashes, it may indicate that the user input an integer array rather than a float array for rr or bias
             spectrum = cosm.size_function(rr, redshift, "Vdn", bias, 1, 0, -0.7, 1.686,"CAMB",False,"output","Spline",2.)
             
             cosm_global_shell = cosm.D_C(high_z_edge)**3 - cosm.D_C(low_z_edge)**3 
@@ -471,7 +494,7 @@ class VoSS_Fit ():
                 else:
                     interp, method = pickle.load(temp_infile)
         else:
-            print("The provided interpolator does not exist. Exiting.")
+            raise ValueError("The provided interpolator does not exist. Exiting.")
             
         # identify parameters for mcmc
         priors = []
@@ -493,7 +516,7 @@ class VoSS_Fit ():
 
         
         # run mcmc
-        if self.model == 'bias':
+        if 'bias' in self.parameters.keys():
             
             #perform mcmc
             output = {}
@@ -608,7 +631,7 @@ def param_to_latex(param, model):
     parameters = {'om':'$\Omega_m$', 'omb':'$\Omega_b$', 'h':'$h$', 
                  'ns':'$n_s$', 'as':'$a_s$', 's8':'$\sigma_8$', 'tau':'$\tau$', 
                  'w0':'$w_0$', 'wa':'$w_a$',
-                 'bias':'F'}
+                 'bias':'F', 'slope':'B_{\\text{slope}}', 'intercept':'B_{\\text{intercept}}'}
     
     if model == 'wCDM':
         parameters['w0'] = '$w$'
@@ -693,43 +716,89 @@ class VoidSizeFunction():
         self.fid_results = camb.get_results(self.fid_cosm)
     
     """#cumulative size spectrum
-    def cumu_spectrum(self, bin_centers, z_centers, #shell radii and redshift sampling
+    def cumu_spectrum(self, shell_radii, z_centers, z_edges, #shell radii and redshift sampling
                  Om, w0, wa, h, tau, Omb, ns, As, #LCDM parameters
-                 f_bias, delta_tr_v = -0.7, delta_c = 1.686, static_z = -1, kmax = 2, #VSF parameters
-                w=1e-6, get_sigma_8=True, sigma_8 = None):
-        
-        sig8, spectrum = self.spectrum(bin_centers, z_centers, 
-                     Om, w0, wa, h, tau, Omb, ns, As,
-                     f_bias, delta_tr_v, delta_c, static_z, kmax, w, get_sigma_8, sigma_8)
-
-        return sig8, np.cumsum( spectrum [:,::-1], axis = 1 ) [:,::-1]
-    """
-    
-    #size spectrum
-    def spectrum(self, bin_centers, z_centers, z_edges, #shell radii and redshift sampling
-                 Om, w0, wa, h, tau, Omb, ns, As, #LCDM parameters
-                 f_bias, delta_tr_v = -0.7, delta_c = 1.686, static_z = -1, #VSF parameters
-                 kmax = 2, scale_to_bin = False,#normalization and power spectrum options
+                 fiducial_linear_bias, B_slope, B_offset, #bias parameters
+                 delta_tr_v = -0.7, delta_c = 1.686, #VSF parameters
+                 static_z = -1, #static redshift for cutsky simulations (only used if >= 0)
+                 vol_norm = 1, kmax = 2, scale_to_bin = False,#normalization and power spectrum options
                  bin_edges=None, #shell radii bin edges
                  w=1e-6, get_sigma_8 = True, sigma_8 = None
                 ):
-        bin_centers, bin_edges, z_centers, z_idx, z_edges, f_bias, restore_sort_order = self._format_types(bin_centers, bin_edges, z_centers, z_edges, f_bias)
+        
+        sig8, spectrum, c_corr = self.spectrum(bin_centers, z_centers, 
+                     Om, w0, wa, h, tau, Omb, ns, As,
+                     f_bias, delta_tr_v, delta_c, static_z, kmax, w, get_sigma_8, sigma_8,
+                     ...remaining params)
+
+        return sig8, np.cumsum( spectrum [:,::-1], axis = 1 ) [:,::-1], c_corr
+    """
+    
+    #size spectrum
+    def spectrum(self, shell_radii, z_centers, z_edges, #shell radii and redshift sampling
+                 Om, w0, wa, h, tau, Omb, ns, As, #LCDM parameters
+                 fiducial_linear_bias, B_slope, B_offset, #bias parameters
+                 delta_tr_v = -0.7, delta_c = 1.686, #VSF parameters
+                 static_z = -1, #static redshift for cutsky simulations (only used if >= 0)
+                 vol_norm = 1, kmax = 2, scale_to_bin = False,#normalization and power spectrum options
+                 bin_edges=None, #shell radii bin edges
+                 w=1e-6, get_sigma_8 = True, sigma_8 = None
+                ):
+        shell_radii, bin_edges, z_centers, z_idx, z_edges, fiducial_linear_bias, restore_sort_order = self._format_types(shell_radii, bin_edges, z_centers, z_edges, fiducial_linear_bias)
         if not hasattr(self, 'fid_cosm'):
             raise AttributeError("Fiducial cosmology must be set with set_fid_cosmology before caclulating VSF!")
         
         #get results for calculating sigma_R
+        
         self._set_fid_results(z_centers, static_z, kmax)
         
-        
         self.set_cosmology( Om, w0, wa, h, tau, Omb, ns, As)
-        #caclulate void size spetrum
-        sig8, spectrum = self._spectrum(bin_centers,
-              delta_tr_v,
-              w,z_centers,f_bias,
-              z_idx,
-              delta_c, static_z = static_z, 
-              kmax = kmax, scale_to_bin = scale_to_bin, bin_edges=bin_edges,
-              get_sigma_8 = get_sigma_8, sigma_8 = sigma_8)
+        
+        
+        #get results for calculating sigma_R
+        if static_z >= 0:
+            redshifts = [static_z] if static_z == 0 else [static_z, 0]
+            self.cosm.set_matter_power(redshifts=redshifts, kmax=kmax)
+        else:
+            self.cosm.set_matter_power(redshifts=z_centers, kmax=kmax)
+        results = camb.get_results(self.cosm)
+        self.results = results
+
+        #calculate bias
+        """_, _, pk_fid = self.fid_results.get_matter_power_spectrum(minkh=1e-4, maxkh=1e-2, npoints = 50)
+        _, _, pk_cosm = self.results.get_matter_power_spectrum(minkh=1e-4, maxkh=1e-2, npoints = 50)
+        cosmo_linear_bias = fiducial_linear_bias * np.mean((pk_fid/pk_cosm)**(.5),axis=1)[z_idx]"""
+        #cosmo_linear_bias = fiducial_linear_bias #temporary simplification for testing
+        #f_bias = B_slope * cosmo_linear_bias + B_offset
+        f_bias = fiducial_linear_bias
+        delta_NL_v = delta_tr_v / np.expand_dims(f_bias, 1)
+        # catch unphysical bias (DM overdensity = tracer underdenity or negative DM density)
+        if np.any(f_bias <= 0) or np.any(1 + delta_NL_v <= 0):
+            #sigma_8, void size function, volume correction
+            return np.inf, np.full(shell_radii.shape, np.inf), np.full(z_edges[:-1].shape, np.inf)
+        
+        #account for change in survey volume
+        ang = results.angular_diameter_distance(z_centers[z_idx])
+        hz = results.h_of_z(z_centers[z_idx])
+        fid_ang = self.fid_results.angular_diameter_distance(z_centers[z_idx])
+        fid_hz = self.fid_results.h_of_z(z_centers[z_idx])
+        
+        #Alcock Paczynski effect on void radii
+        ap_term = np.expand_dims( (np.power(fid_hz/hz, 1./3)) * np.power(ang/fid_ang, 2./3) , axis=1)
+        #account for division by 0 errors
+        zero = np.where (z_centers[z_idx]==0)
+        ap_term[zero] = 1
+        
+        #void size function
+        dN = dndln(shell_radii * ap_term, w,  delta_NL_v, results, static_z, z_idx, delta_c, sigma_8)
+        if scale_to_bin: 
+            dN *= np.diff(np.log(bin_edges * ap_term))
+        
+        #get sigma 8
+        sig8 = results.get_sigma8_0() if get_sigma_8 else None
+
+        #normalize void size function
+        spectrum =  vol_norm * dN
         
         #calculate volume correction
         fid_comov_h  = self.fid_results.comoving_radial_distance(z_edges[:-1])
@@ -772,48 +841,7 @@ class VoidSizeFunction():
         return cosm
         
         
-    def _spectrum(self, shell_radii,
-                  delta_tr_v,w,z_centers,f_bias, #VSF theory parameters
-                  z_idx,
-                  delta_c = 1.686, #Default VSF theory parameters
-                  static_z = -1, #static redshift for cutsky simulations (only used if >= 0)
-                  vol_norm = 1, kmax=2, scale_to_bin = False,#normalization and power spectrum options
-                  bin_edges=None, #shell radii bin edges
-                  get_sigma_8 = True, sigma_8 = None): 
-        
 
-        delta_NL_v = delta_tr_v / np.expand_dims(f_bias, 1)
-        
-        #get results for calculating sigma_R
-        if static_z >= 0:
-            redshifts = [static_z] if static_z == 0 else [static_z, 0]
-            self.cosm.set_matter_power(redshifts=redshifts, kmax=kmax)
-        else:
-            self.cosm.set_matter_power(redshifts=z_centers, kmax=kmax)
-        results = camb.get_results(self.cosm)
-        self.results = results
-        
-        #account for change in survey volume
-        ang = results.angular_diameter_distance(z_centers[z_idx])
-        hz = results.h_of_z(z_centers[z_idx])
-        fid_ang = self.fid_results.angular_diameter_distance(z_centers[z_idx])
-        fid_hz = self.fid_results.h_of_z(z_centers[z_idx])
-        
-        #Alcock Paczynski effect on void radii
-        ap_term = np.expand_dims( (np.power(fid_hz/hz, 1./3)) * np.power(ang/fid_ang, 2./3) , axis=1)
-        #account for division by 0 errors
-        zero = np.where (z_centers[z_idx]==0)
-        ap_term[zero] = 1
-        
-        #void size function
-        dN = dndln(shell_radii * ap_term, w,  delta_NL_v, results, static_z, z_idx, delta_c, sigma_8)
-        if scale_to_bin: 
-            dN *= np.diff(np.log(bin_edges * ap_term))
-        
-        #get sigma 8
-        sig8 = results.get_sigma8_0() if get_sigma_8 else None
-
-        return sig8, vol_norm * dN
 
         
 

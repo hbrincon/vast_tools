@@ -4,6 +4,11 @@ from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 import ShellVolumeMaskedPython as svm
 
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: Dahlia Veyrat
+"""
   
 
 def profile(voids, 

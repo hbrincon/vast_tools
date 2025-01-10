@@ -1,5 +1,11 @@
 import numpy as np
 
+"""
+Authors: Hernan Rincon
+
+Some code has been adopted from the following individuals: [check authors]
+"""
+
 def bounding_volume(x, R):
     """Return the volume and corners of a parallelpiped containing the
     n input spheres of interest.

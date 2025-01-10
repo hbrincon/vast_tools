@@ -3,9 +3,16 @@ import numpy as np
 from vast.voidfinder._voidfinder_cython_find_next import MaskChecker
 from vast.voidfinder.voidfinder_functions import not_in_mask
 
-import ShellVolumeMaskedPython as svm
+#import ShellVolumeMaskedPython as svm
 
-# Core functions
+"""
+Authors: Hernan Rincon
+
+"""
+
+# This code calculates the volume of a VAST survey mask by tiling it with cubes
+
+#TODO: parallelize code
 
 def calculate_survey_volume(x,y,z,
                             grid_spacing,
@@ -100,6 +107,7 @@ def apply_survey_mask(
     mask, 
     mask_resolution,
     dist_limits,
+    return_indices = False
     ):
     #cut down a grid into points within a survey mask
   
@@ -133,21 +141,74 @@ def apply_survey_mask(
             else:
                 outside_mask[i] = 0 if np.any(mask[:,-1]) else 1
         #handle points in yz plane
-        #The create: divide by zero encountered in double_scalars ra = np.arctan(coords[1]/coords[0])
+        #TODO: divide by zero encountered in double_scalars ra = np.arctan(coords[1]/coords[0])
         elif grid[i][0] == 0:
             #Temporary solution, exclude these points
             outside_mask[i] = 1
         else:
             outside_mask[i] = not_in_mask([grid[i]], mask, mask_resolution, min_dist, max_dist)
-            
+    
+    if return_indices:
+        return ~outside_mask.astype(bool)
+    
     return grid[~outside_mask.astype(bool)]
+
 
 def apply_survey_edge_cut(
     grid,
     mask, 
     mask_resolution,
     dist_limits,
-    mask_trim=30,
+    mask_trim,
+    ):
+    #removes objects near the mask borders
+    
+    
+    num_points = grid.shape[0]
+
+    
+    #find points that are fully in mask within a distance of mask_trim
+    
+    in_mask = np.full(num_points, True)
+    
+    # Create a set of points on the surface of a sphere to test for mask membership
+    coords = np.array([
+        [0, 2**.5, 2**-.25],
+        [0, -2**.5, 2**-.25],
+        [2**.5, 0, 2**-.25],
+        [-2**.5, 0, 2**-.25],
+        [1, 1, -2**-.25],
+        [1, -1, -2**-.25],
+        [-1, 1, -2**-.25],
+        [-1, -1, -2**-.25],
+    ])
+
+
+    for x,y,z in coords:
+    
+        grid_copy = grid * 1
+        # defined so that 0<theta<pi and 0<phi<2pi
+        grid_copy[:,0] = grid_copy[:,0] + x * mask_trim
+        grid_copy[:,1] = grid_copy[:,1] + y * mask_trim
+        grid_copy[:,2] = grid_copy[:,2] + z * mask_trim
+        print(grid_copy[0])
+
+        in_mask = in_mask * apply_survey_mask(grid_copy, mask, mask_resolution, dist_limits, return_indices = True)
+    
+   
+    
+    return grid[in_mask], in_mask
+
+"""
+Old version:
+
+def apply_survey_edge_cut(
+    grid,
+    mask, 
+    mask_resolution,
+    dist_limits,
+    grid_spacing,
+    mask_trim,
     ):
     #removes objects near the mask borders
     
@@ -156,7 +217,35 @@ def apply_survey_edge_cut(
 
     near_edge = np.full(num_points, False)
     
+    #find points that are fully in mask within a distance of mask_trim
+    
+    in_mask = np.full(num_points, True)
+    
+    # We will check eight cooridnates in a cube around each point
+    x_coords = [-1, -1, -1,  1,  1,  1, -1, 1]
+    y_coords = [-1, -1,  1, -1,  1, -1,  1, 1]
+    z_coords = [-1,  1, -1, -1, -1,  1,  1, 1]
+    extreme_coords = np.array([x_coords, y_coords, z_coords]).T
+    
+    for coord in extreme_coord:
+    
+        grid_copy = grid * 1
+
+        grid_copy[:,0] = grid_copy[:,0] + coord[0] * mask_trim
+        grid_copy[:,1] = grid_copy[:,1] + coord[1] * mask_trim
+        grid_copy[:,2] = grid_copy[:,2] + coord[2] * mask_trim
+
+        in_mask = in_mask * apply_survey_mask(grid_copy, mask, mask_resolution, dist_limits, return_indices = True)
+    
+    # mark points that are fully in mask within a distance of mask_trim
+    near_edge[in_mask] = True
+    
+    
     for i in range(num_points):
+        
+        #skip over points that we know are fully in mask within a distance of mask_trim
+        if near_edge[i] == True:
+            continue
         
         vol_frac = svm.shell_fraction(
                np.array([np.concatenate((grid[i], [mask_trim, 0]))]),
@@ -172,6 +261,7 @@ def apply_survey_edge_cut(
         near_edge[i] = vol_frac < 1
     
     return grid[~near_edge]
+"""
 
 def apply_dist_limits(
     grid,
