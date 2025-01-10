@@ -1,10 +1,9 @@
 import numpy as np
 
 """
-Authors: Hernan Rincon
-
-Some code has been adopted from the following individuals: [check authors]
+This code has been adopted from the following individuals: Kelly Douglass
 """
+
 
 def bounding_volume(x, R):
     """Return the volume and corners of a parallelpiped containing the
