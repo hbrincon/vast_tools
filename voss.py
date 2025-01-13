@@ -462,6 +462,7 @@ class VoSS_Fit ():
             r_edges = self.bin_edges[i]
             log_bin_widths = np.diff(np.log(r_edges * vol_correction))
             #note: if this crashes, it may indicate that the user input an integer array rather than a float array for rr or bias
+            #TODO: type conversions
             spectrum = cosm.size_function(rr, redshift, "Vdn", bias, 1, 0, -0.7, 1.686,"CAMB",False,"output","Spline",2.)
             
             cosm_global_shell = cosm.D_C(high_z_edge)**3 - cosm.D_C(low_z_edge)**3 

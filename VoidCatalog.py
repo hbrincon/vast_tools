@@ -30,31 +30,81 @@ c = 3e5 # km/s
 DtoR = np.pi/180
 
 class VoidCatalog():
-    # base class for void catalogs
+    """
+    Base class for void catalogs
+    
+    """
     
     def __init__(self, edge_buffer):
+        """
+        Initializes the void catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        edge_buffer (float): The distance from the survey boundaries to cut on before performing all
+            analysis. This volume cut defines an interior volume V_fid within which void properietes 
+            have a reduced dependance on edge effects.
+            
+        """
         self.edge_buffer = edge_buffer
     
     def __getitem__(self, table):
+        """
+        Indexes into the void catalog HDUs.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        table (string): The name of the HDU being indexed into.
+        
+        """
         return self.tables[str.upper(table)]
     
     def lower_col_names(self):
+        """
+        Makes the column names of the Void Catalog HDUs lower case.
+        
+        """
         for table in self.tables.values():
             for name in table.colnames:
                 table[name].name = name.lower()
         
     def upper_col_names(self):
+        """
+        Makes the column names of the Void Catalog HDUs upper case.
+        
+        """
         for table in self.tables.values():
             for name in table.colnames:
                 table[name].name = name.upper()
                 
     def read_catalog(self, file_name):
+        """
+        Reads a void catalog from a FITS file.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        file_name (string): The location of the void catalog file.
+        
+        """
         raise NotImplementedError("Please Implement this method")
         
     def clear_catalog(self):
+        """
+        Deletes duplicate copies of the void catalog data.
+        
+        """
         del self._catalog
                 
     def save_catalog(self, output_file_name = None):
+        """
+        Saves the void catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        output_file_name (string): The location to save the void catalog to. Defaults to None, in 
+            which case the void catalog file is overwritten.
+    
+        """
         
         #overwrite catalog if no output file is specified
         if output_file_name is None:
@@ -95,7 +145,35 @@ class VoidCatalog():
         self.clear_catalog()
                 
     def add_galaxies(self, galaxies_path, load_vflag = False, redshift_name='redshift', ra_name = 'ra', dec_name='dec', cartesian = False, x_name = 'x', y_name = 'y', z_name = 'z'):
-            
+        """
+        Reads in a galaxy catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        galaxies_path (string): The location of the galaxies file. The file should be in .dat, .txt, 
+            .fits, or .h5 format.
+
+        load_vflag (TO BE REMOVED)
+
+        redshift_name (string): The name of the redshift column. Defaults to 'redshift'
+
+        ra_name (string): The name of the ra column. Defaults to 'ra'
+
+        dec_name (string): The name of the dec column. Defaults to 'dec'
+
+        cartesian (bool): Boolean that denotes wheter to use ra-dec-redshift or x-y-z coordinates for
+            the galaxy positions. Defaults to False, in which case ra-dec-redshift coordinates are 
+            used
+
+        x_name (string): The name of the x column. Defaults to 'x'
+
+        y_name (string): The name of the y column. Defaults to 'y'
+
+        z_name (string): The name of the z column. Defaults to 'z'
+    
+        """
+
+        self.galaxies_path = galaxies_path
         self.galaxies = load_data_to_Table(galaxies_path)
         self.galaxies['gal'] = np.arange(len(self.galaxies)) 
         
@@ -146,6 +224,20 @@ class VoidCatalog():
 
             
     def get_single_overlap(self, mask_hdu=None):
+        """
+        Calculates the void volume fraction of a void catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        mask_hdu (astropy fits HDU): The HDU representing the angular survey mask. Defaults to None, in
+            which case the void catalog's own angular mask is used.
+    
+            
+        returns:
+        ---------------------------------------------------------------------------------------------
+        overlap (tuple): The void volume fraction statistics
+        
+        """
         
         if mask_hdu is None and hasattr(self, 'info') and hasattr(self, 'mask'):
             mask = self.mask
@@ -165,23 +257,48 @@ class VoidCatalog():
 
         rmin = self.info['DLIML']
         rmax = self.info['DLIMU']
-        vosc = vo.SingleCalculator(void1,  "Cat 1", 
-                                          None,
-                                          rmin, rmax,
-                                          zone_table_V1 = zone1,
-                                          V1_algorithm=cat_type, 
-                                          mask_tuple=(mask.astype(bool), mask_res)
-                                         )
-        vosc.find_overlap(self.edge_buffer)
+        void_fraction_calculator = vo.SingleCalculator(
+            void1,  "Cat 1", 
+            None,
+            rmin, rmax,
+            zone_table_V1 = zone1,
+            V1_algorithm=cat_type, 
+            mask_tuple=(mask.astype(bool), mask_res)
+        )
+        
+        void_fraction_calculator.find_overlap(self.edge_buffer)
 
-        return vosc.report(do_print=False, do_return=True)
+        overlap = void_fraction_calculator.report(do_print=False, do_return=True)
+
+        return overlap
     
                 
 
 class VoidFinderCatalog (VoidCatalog):
-    # Class for VoidFinder catalogs
+    """
+    Class for VoidFinder catalogs
+
+    """
     
     def __init__ (self, file_name, survey_name=None, directory = './', edge_buffer=30):
+        """
+        Initializes a VoidFinder catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        file_name (string): The location of the void catalog file.
+
+        survey_name (string): The name of the survey written to the void catalog. Used to contruct 
+            the void catalog location if file_name is set to None. Defaults to None.
+
+        directory (string): The directory in which the void catalog is located. Used to contruct the
+            void catalog location if file_name is set to None. Defaults to './'.
+
+        edge_buffer (float): The distance from the survey boundaries to cut on before performing all
+            analysis. This volume cut defines an interior volume V_fid within which void properietes 
+            have a reduced dependance on edge effects.
+        
+        """
         
         super().__init__(edge_buffer)
         
@@ -257,9 +374,22 @@ class VoidFinderCatalog (VoidCatalog):
         self.lower_col_names()
         
     def read_catalog(self, file_name):
+        """
+        Reads a void catalog from a FITS file.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        file_name (string): The location of the void catalog file.
+        
+        """
         self._catalog = open_fits_file(file_name)
      
     def void_stats(self):
+        """
+        Calculates void catalog statistics such as void counts, and median and maximum void sizes for
+        edge voids, interior voids, and all voids.
+        
+        """
         
         num_voids = len(self.maximals)
         print(num_voids, 'voids')
@@ -302,6 +432,19 @@ class VoidFinderCatalog (VoidCatalog):
             print('Maximum Reff (V. Fid):', mknum(np.max(reff)),'Mpc/h')
             
     def calculate_r_eff(self, overwrite = False, save_every = None):
+        """
+        Calculates the effective radii of voids in a VoidFinder catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        overwrite (bool): Boolean that terminates the calculation if the effective radii have
+            previously been calculated. When set to True, this behavior is disabled. Defaults to 
+            False.
+    
+        save_every (int): Integer that determines how fequently to save the calcualted output, 
+            corresponding to the number of voids per save. If None, all void radii are calculated 
+            with no intermediate saving.
+        """
         
         def save_r_eff():
             #format and save output
@@ -345,7 +488,20 @@ class VoidFinderCatalog (VoidCatalog):
         
         save_r_eff()
  
-    def calculate_vflag(self, overwrite = False, dist_metric = 'comoving', cartesian = False):
+    def calculate_vflag(self, overwrite = False, cartesian = False):
+        """
+        Calculates which galaxies are located inside or outside of voids.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        overwrite (bool): Boolean that terminates the calculation if the void membership has
+            previously been calculated. When set to True, this behavior is disabled. Defaults to 
+            False.
+
+        cartesian (bool): Boolean that when True, denotes a cubic box simulaion and applies no 
+            survey mask to the galaxies. Defaults to False, in which case the survey mask is applied.
+        
+        """
         # warning: no mask feature is used for cubic box simulations (cartesian = True). 
         # All galaxies are assumed to be inside the mask. There is no option for a 
         # periodic mode.
@@ -376,9 +532,8 @@ class VoidFinderCatalog (VoidCatalog):
             rmin = self.info['DLIML']
             rmax = self.info['DLIMU']
 
-        ################################################################################
-        # IDENTIFY LARGE-SCALE ENVIRONMENT
-        #-------------------------------------------------------------------------------
+        # Identify large-scale environment
+        
         print('Identifying environment')
 
         galaxies['vflag'] = -9
@@ -403,9 +558,7 @@ class VoidFinderCatalog (VoidCatalog):
                                                    rmax)
             
             
-        ################################################################################
-        # SAVE OUTPUT
-        #-------------------------------------------------------------------------------
+        # Write output to the catalog object
         
         hdu = fits.BinTableHDU(
             Table(self.galaxies['gal','vflag'],
@@ -419,7 +572,7 @@ class VoidFinderCatalog (VoidCatalog):
             self.vflag = Table(self._catalog['VFLAG'].data)
             self.tables['VFLAG'] = self.vflag
             
-        #format and save output
+        # Format and save output
         if self.capitalize_colnames:
             self.upper_col_names()
             
@@ -430,19 +583,22 @@ class VoidFinderCatalog (VoidCatalog):
             
     def plot_vflag(self, mask_title='Survey Mask', galaxies_title='Galaxy Distribution', file_prefix='vast', save_image = False):
         """
-        Creates an output plot of (1) the mask and (2) the galaxies partitioned into 
-        void/wall/other types in ra-dec coordinates
+        Creates an output plot of (1) the mask and (2) the galaxies partitioned into void/wall/other 
+        types in ra-dec coordinates
 
-        Parameters:
-        mask_title: string
-            The mask plot title
-        galaxies_title: string
-            The galaxies plot title
-        file_prefix: string
-            A name that is attached to the output png files to identify them
+        params:
+        ---------------------------------------------------------------------------------------------
+        mask_title (string): The mask plot title
+            
+        galaxies_title (string): The galaxies plot title
+        
+        file_prefix (string): A name that is attached to the output png files to identify them
+
+        save_image (bool): Boolean that when true, saves the output to png files. Defaults to False
+        
         """
         
-        print('WARNING: ensure that the calcualted vflags match the currently loaded galaxy file, as vflags are saved to the void file and not the galaxy file.')
+        print('WARNING: ensure that the calculated vflags match the currently loaded galaxy file, as vflags are saved to the void file and not the galaxy file.')
         
         if not hasattr(self, 'vflag'):
             raise ValueError('vflags not calculated for galaxies.')
@@ -479,8 +635,35 @@ class VoidFinderCatalog (VoidCatalog):
         
     def galaxy_membership(self, custom_mask_hdu=None, return_selector=False,
                          rmin = None, rmax = None, mag_lim = None):
+        """
+        Reports which galaxies are inside or outside of voids, assuming that this calculation has 
+        previously been completed with calculate_vflag()
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        custom_mask_hdu (astropy fits HDU): A mask HDU corresponding to an angular mask used for 
+            selecting the galaxies. Defaults to None, in which case, the void catalog's angular mask
+            is used.
+            
+        return_selector (bool): Boolean that when True, returns the indices of galaxies located 
+            within voids. Defaults to False
         
-        print('WARNING: ensure that the calcualted vflags match the currently loaded galaxy file, as vflags are saved to the void file and not the galaxy file.')
+        rmin (float): The minimum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        rmax (float): The maximum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        mag_lim (float): The r-band absolute magnitude limit used for the calculation. Defaults to
+            None, in which case the catalog magntiude limit is used.
+
+        returns:
+        ---------------------------------------------------------------------------------------------
+        membership (tuple): The galaxy membership statistics, or the indices of galaxies in voids if
+            return_selector is True.
+        """
+        
+        print('WARNING: ensure that the calculated vflags match the currently loaded galaxy file, as vflags are saved to the void file and not the galaxy file.')
         
         if rmin is None:
             rmin = self.info['DLIML']
@@ -528,14 +711,39 @@ class VoidFinderCatalog (VoidCatalog):
         
         if return_selector:
             selector = np.isin(self.galaxies['gal'], galaxies['gal'][galaxies['vflag']==1])
-            return ( selector, num_tot )
+            membership = ( selector, num_tot )
+        else:
+            membership = ( num_in_void, num_tot )
+            
+        return membership
 
-        return ( num_in_void, num_tot )
 
-
-
-    # return a new void catalog containing only voids in a masked region
+    '''
     def subsample_catalog(self, mask_hdu, catalog_file_path, rmin = None, rmax = None):
+         """
+        Returns a new void catalog containing only voids in a masked region
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        mask_hdu (astropy fits HDU): A mask HDU corresponding to an angular mask used for 
+            selecting the galaxies. Defaults to None, in which case, the void catalog's angular mask
+            is used.
+            
+        catalog_file_path (string): The location to save eth modified void catalog to
+        
+        rmin (float): The minimum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        rmax (float): The maximum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        mag_lim (float): The r-band absolute magnitude limit used for the calculation. Defaults to
+            None, in which case the catalog magntiude limit is used.
+
+        returns:
+        ---------------------------------------------------------------------------------------------
+        new_catalog (VoidCatalog object): The subsampled void catalog
+        """
         
         if rmin is None:
             rmin = self.info['DLIML']
@@ -591,15 +799,39 @@ class VoidFinderCatalog (VoidCatalog):
         
         #TODO: update he primary HDU with new mask info
         
-        return new_catalog
+        return new_catalog'''
         
     
         
 
 class V2Catalog(VoidCatalog):
-    # Class for V2 catalogs
+    """
+    Class for V2 void catalogs
+
+    """
     
     def __init__(self, file_name, survey_name=None, pruning = 'VIDE', directory = './', edge_buffer=30):
+        """
+        Initializes a VoidFinder catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        file_name (string): The location of the void catalog file.
+
+        survey_name (string): The name of the survey written to the void catalog. Used to contruct 
+            the void catalog location if file_name is set to None. Defaults to None.
+
+        pruning (string): The name of the pruning method written to the void catalog. Used to 
+            contruct the void catalog location if file_name is set to None. Defaults to 'VIDE'.
+
+        directory (string): The directory in which the void catalog is located. Used to contruct the
+            void catalog location if file_name is set to None. Defaults to './'.
+
+        edge_buffer (float): The distance from the survey boundaries to cut on before performing all
+            analysis. This volume cut defines an interior volume V_fid within which void properietes 
+            have a reduced dependance on edge effects.
+        
+        """
         
         super().__init__(edge_buffer)
         
@@ -686,9 +918,22 @@ class V2Catalog(VoidCatalog):
         self.mask_info['DLIMU'] = voidfinder_cat.info['DLIMU']"""
     
     def read_catalog(self, file_name):
+        """
+        Reads a void catalog from a FITS file.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        file_name (string): The location of the void catalog file.
+        
+        """
         self._catalog = open_fits_file_V2(file_name,None)        
         
     def void_stats(self):
+        """
+        Calculates void catalog statistics such as void counts, and median and maximum void sizes for
+        edge voids, interior voids, and all voids.
+        
+        """
         
         num_voids = len(self.voids)
         print(num_voids, 'voids')
@@ -734,6 +979,33 @@ class V2Catalog(VoidCatalog):
         
     def galaxy_membership(self, custom_mask_hdu=None, return_selector=False,
                          rmin = None, rmax = None, mag_lim = None):
+        """
+        Reports which galaxies are inside or outside of voids, assuming that this calculation has 
+        previously been completed with calculate_vflag()
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        custom_mask_hdu (astropy fits HDU): A mask HDU corresponding to an angular mask used for 
+            selecting the galaxies. Defaults to None, in which case, the void catalog's angular mask
+            is used.
+            
+        return_selector (bool): Boolean that when True, returns the indices of galaxies located 
+            within voids. Defaults to False
+        
+        rmin (float): The minimum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        rmax (float): The maximum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        mag_lim (float): The r-band absolute magnitude limit used for the calculation. Defaults to
+            None, in which case the catalog magntiude limit is used.
+
+        returns:
+        ---------------------------------------------------------------------------------------------
+        membership (tuple): The galaxy membership statistics, or the indices of galaxies in voids if
+            return_selector is True.
+        """
         
         if rmin is None:
             rmin = self.info['DLIML']
@@ -790,38 +1062,110 @@ class V2Catalog(VoidCatalog):
             selected_IDs = self.galzone['gal'][in_sample][void0!=-1]
             #get boolean mask of galaxies in final cut
             selector = np.isin(self.galaxies['gal'], selected_IDs)
-            return ( selector, num_tot )
-
-        return ( num_in_void, num_tot )
+            membership = ( selector, num_tot )
+        else:
+            membership = ( num_in_void, num_tot )
+            
+        return membership
 
 
 class VoidCatalogStacked ():
     
-    # base class for loading multiple void catalogs at once 
-    # (such as for surveys with mutliple contiguous footprints)
+    """
+    Base class for loading multiple void catalogs at once 
+    (such as for surveys with mutliple contiguous footprints)
+
+    """
 
     def __init__ (self, edge_buffer):
+        """
+        Initializes a collection of void catalogs.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        edge_buffer (float): The distance from the survey boundaries to cut on before performing all
+            analysis. This volume cut defines an interior volume V_fid within which void properietes 
+            have a reduced dependance on edge effects.
+        
+        """
         self.edge_buffer=edge_buffer
     
     def __getitem__(self, cat):
+        """
+        Indexes into the void catalogs.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        cat (string): The name of the void catalog being indexed into.
+        
+        """
         return self._catalogs[cat]
     
     def lower_col_names(self):
+        """
+        Makes the column names of the Void Catalog HDUs lower case.
+        
+        """
         
         for cat in self._catalogs:
             self._catalogs[cat].lower_col_names()
         
     def upper_col_names(self):
+        """
+        Makes the column names of the Void Catalog HDUs upper case.
+        
+        """
         
         for cat in self._catalogs:
             self._catalogs[cat].upper_col_names()
                 
     def add_galaxies(self, galaxies_paths, **kwargs):
+        """
+        Reads in a galaxy catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        galaxies_paths (list of strings): The locations of the galaxies file. The files should be in 
+            .dat, .txt, .fits, or .h5 format.
+
+        kwargs:
+        ---------------------------------------------------------------------------------------------
+        redshift_name (string): The name of the redshift column. Defaults to 'redshift'
+
+        ra_name (string): The name of the ra column. Defaults to 'ra'
+
+        dec_name (string): The name of the dec column. Defaults to 'dec'
+
+        cartesian (bool): Boolean that denotes wheter to use ra-dec-redshift or x-y-z coordinates for
+            the galaxy positions. Defaults to False, in which case ra-dec-redshift coordinates are 
+            used
+
+        x_name (string): The name of the x column. Defaults to 'x'
+
+        y_name (string): The name of the y column. Defaults to 'y'
+
+        z_name (string): The name of the z column. Defaults to 'z'
+    
+        """
         
         for cat, path in zip(self._catalogs, galaxies_paths):
             self._catalogs[cat].add_galaxies(path, **kwargs)
             
     def get_single_overlap(self, mask_hdu=None): 
+        """
+        Calculates the void volume fraction of a collection of void catalogs.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        mask_hdu (astropy fits HDU): The HDU representing the angular survey mask. Defaults to None, in
+            which case the void catalog's own angular mask is used.
+    
+            
+        returns:
+        ---------------------------------------------------------------------------------------------
+        res (tuple): The void volume fraction statistics for each catalog
+        
+        """
         
         res = []
         
@@ -831,6 +1175,11 @@ class VoidCatalogStacked ():
         return res
             
     def void_stats(self):
+        """
+        Calculates void catalog statistics such as void counts, and median and maximum void sizes for
+        edge voids, interior voids, and all voids.
+        
+        """
         
         for cat in self._catalogs:
             print(cat)
@@ -838,21 +1187,70 @@ class VoidCatalogStacked ():
             print("")
         print("Combined")
                     
-    def galaxy_membership(self, custom_mask_hdu=None):
+    def galaxy_membership(self, custom_mask_hdu=None, return_selector=False, rmin=None, rmax=None, mag_lim=None):
+        """
+        Reports which galaxies are inside or outside of voids, assuming that this calculation has 
+        previously been completed with calculate_vflag()
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        custom_mask_hdu (astropy fits HDU): A mask HDU corresponding to an angular mask used for 
+            selecting the galaxies. Defaults to None, in which case, the void catalog's angular mask
+            is used.
+            
+        return_selector (bool): Boolean that when True, returns the indices of galaxies located 
+            within voids. Defaults to False
+        
+        rmin (float): The minimum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        rmax (float): The maximum line-of-sight comoving distance for the calculation. Defaults to
+            None, in which case the catalog redshift limit is used.
+
+        mag_lim (float): The r-band absolute magnitude limit used for the calculation. Defaults to
+            None, in which case the catalog magntiude limit is used.
+
+        returns:
+        ---------------------------------------------------------------------------------------------
+        membership (tuple): The galaxy membership statistics, or the indices of galaxies in voids if
+            return_selector is True.
+        """
         
         res = []
         for cat in self._catalogs:
-            res.append(self._catalogs[cat].galaxy_membership(custom_mask_hdu, return_selector=False))
+            res.append(self._catalogs[cat].galaxy_membership(custom_mask_hdu, return_selector, rmin, rmax, mag_lim))
             
         return res
     
 class VoidFinderCatalogStacked (VoidCatalogStacked):
     
-    # Class for loading multiple VoidFinder catalogs at once 
-    # (such as for surveys with mutliple contiguous footprints)
-
-    def __init__ (self, cat_names, file_names, survey_names=None, directory = './', capitalize_colnames = False, edge_buffer=30):
+    """
+    Class for loading multiple VoidFinder catalogs at once 
+    (such as for surveys with mutliple contiguous footprints)
     
+    """
+
+    def __init__ (self, cat_names, file_names, survey_names=None, directory = './', edge_buffer=30):
+        """
+        Initializes a collection of VoidFinder catalogs.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        cat_names (list of strings): Shorthand identifiers for the void catalogs used for indexing
+        
+        file_names (list of strings): The locations of the void catalog files.
+
+        survey_names (list of strings): The name of the surveys written to the void catalogs. Used to 
+            contruct the void catalog locations if file_names is set to None. Defaults to None.
+
+        directory (string): The directories in which the void catalogs are located. Used to contruct 
+            the void catalog locations if file_namse is set to None. Defaults to './'.
+
+        edge_buffer (float): The distance from the survey boundaries to cut on before performing all
+            analysis. This volume cut defines an interior volume V_fid within which void properietes 
+            have a reduced dependance on edge effects.
+        
+        """
         super().__init__(edge_buffer)
          
         if file_names is None:
@@ -865,6 +1263,16 @@ class VoidFinderCatalogStacked (VoidCatalogStacked):
     
             
     def void_stats(self, report_individual=True):
+        """
+        Calculates void catalog statistics such as void counts, and median and maximum void sizes for
+        edge voids, interior voids, and all voids.
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        report_individual (bool): Boolean that when True, prints the statistics of individual void 
+                catalogs in additon to those of the total collection. Defaults to True.
+        
+        """
         
         def filter_maximals(catalog):
             
@@ -917,22 +1325,73 @@ class VoidFinderCatalogStacked (VoidCatalogStacked):
             print('Maximum Reff (V. Fid):', mknum(np.max(reff)),'Mpc/h')
         
     def calculate_r_eff(self, overwrite = False):
+        """
+        Calculates the effective radii of voids in a VoidFinder catalog.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        overwrite (bool): Boolean that terminates the calculation if the effective radii have
+            previously been calculated. When set to True, this behavior is disabled. Defaults to 
+            False.
+    
+        save_every (int): Integer that determines how fequently to save the calcualted output, 
+            corresponding to the number of voids per save. If None, all void radii are calculated 
+            with no intermediate saving.
+        """
         
         for cat in self._catalogs:
             self._catalogs[cat].calculate_r_eff(overwrite)
             
-    def calculate_vflag(self, overwrite = False, dist_metric = 'comoving'):
+    def calculate_vflag(self, overwrite = False, cartesian=False):
+        """
+        Calculates which galaxies are located inside or outside of voids.
+        
+        params:
+        ---------------------------------------------------------------------------------------------
+        overwrite (bool): Boolean that terminates the calculation if the void membership has
+            previously been calculated. When set to True, this behavior is disabled. Defaults to 
+            False.
+
+        cartesian (bool): Boolean that when True, denotes a cubic box simulaion and applies no 
+            survey mask to the galaxies. Defaults to False, in which case the survey mask is applied.
+        
+        """
         
         for cat in self._catalogs:
-            self._catalogs[cat].calculate_vflag(overwrite, dist_metric)
+            self._catalogs[cat].calculate_vflag(overwrite, cartesian)
             
         
 class V2CatalogStacked (VoidCatalogStacked):
-    # Class for loading multiple V2 catalogs at once 
-    # (such as for surveys with mutliple contiguous footprints)
+    """
+    Class for loading multiple V2 catalogs at once 
+    (such as for surveys with mutliple contiguous footprints)
+
+    """
 
     def __init__ (self, cat_names, file_names, survey_names=None,  pruning = 'VIDE', directory = './', edge_buffer=30):
+        """
+        Initializes a collection of V2 void catalogs.
         
+        params:
+        ---------------------------------------------------------------------------------------------
+        cat_names (list of strings): Shorthand identifiers for the void catalogs used for indexing
+        
+        file_names (list of strings): The locations of the void catalog files.
+
+        survey_names (list of strings): The name of the surveys written to the void catalogs. Used to 
+            contruct the void catalog locations if file_names is set to None. Defaults to None.
+
+        pruning (string): The name of the pruning method written to the void catalogs. Used to 
+            contruct the void catalog locations if file_names is set to None. Defaults to 'VIDE'.
+
+        directory (string): The directories in which the void catalogs are located. Used to contruct 
+            the void catalog locations if file_namse is set to None. Defaults to './'.
+
+        edge_buffer (float): The distance from the survey boundaries to cut on before performing all
+            analysis. This volume cut defines an interior volume V_fid within which void properietes 
+            have a reduced dependance on edge effects.
+        
+        """
         super().__init__(edge_buffer)
         
         #format file names
@@ -951,6 +1410,16 @@ class V2CatalogStacked (VoidCatalogStacked):
             self._catalogs[cat].add_mask(voidfinder_cat_stacked[cat])"""
         
     def void_stats(self, report_individual=True):
+        """
+        Calculates void catalog statistics such as void counts, and median and maximum void sizes for
+        edge voids, interior voids, and all voids.
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        report_individual (bool): Boolean that when True, prints the statistics of individual void 
+                catalogs in additon to those of the total collection. Defaults to True.
+        
+        """
         
         if report_individual:
             super().void_stats()
@@ -995,17 +1464,6 @@ class V2CatalogStacked (VoidCatalogStacked):
         print('Mean Reff (V. Fid):', mknum(np.mean(reff)), '+/-',mknum(uncert_mean),'Mpc/h')
         print('Median Reff (V. Fid):', mknum(np.median(reff)), '+/-',mknum(uncert_median),'Mpc/h')
         print('Maximum Reff (V. Fid):', mknum(np.max(reff)),'Mpc/h')
-        
-    def calculate_r_eff(self, overwrite = False):
-        
-        for cat in self._catalogs:
-            self._catalogs[cat].calculate_r_eff(overwrite)
-            
-    def calculate_vflag(self, overwrite = False, dist_metric = 'comoving'):
-        
-        for cat in self._catalogs:
-            self._catalogs[cat].calculate_vflag(overwrite, dist_metric)
-            
                 
         
 def mknum (flt):
@@ -1043,6 +1501,25 @@ def select_mask(gals, mask, mask_resolution, rmin, rmax, r_name = 'Rgal'):
     return gals[points_boolean]
 
 def combined_galaxy_membership(catalog1, catalog2, custom_mask_hdu=None):
+    """
+        Reports which galaxies are common to voids in two void catalogs, exterior to voids in both
+        catalogs, or unique to voids in one catalog or the other.
+
+        params:
+        ---------------------------------------------------------------------------------------------
+        catalog1 (VoidCatalog object): The first void catalog
+
+        catalog2 (VoidCatalog object): The second void catalog
+        
+        custom_mask_hdu (astropy fits HDU): A mask HDU corresponding to an angular mask used for 
+            selecting the galaxies. Defaults to None, in which case, the void catalog's angular mask
+            is used.
+
+        returns:
+        ---------------------------------------------------------------------------------------------
+        membership (tuple): The galaxy membership statistics, or the indices of galaxies in voids if
+            return_selector is True.
+        """
     
     assert len(catalog1.galaxies)==len(catalog2.galaxies)
     

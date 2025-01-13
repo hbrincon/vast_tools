@@ -96,7 +96,7 @@ cpdef void _check_holes_mask_overlap(DTYPE_F64_t[:,:] x_y_z_r_r0_array,
                                      DTYPE_B_t[:] monte_index
                                      ):
     """
-    Given N points on the boundary of each sphere, check them against the mask
+    Given N points on the boundary of each spherical shell, check them against the mask
     if any of the N fall outside the mask, do a monte-carlo volume calculation
     on the sphere
     """

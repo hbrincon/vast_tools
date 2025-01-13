@@ -85,7 +85,7 @@ def histogram(data, domain, bins, normalize = False, fill_alpha=.35,
               hist_kwargs = None, plot_kwargs = None, fill_kwargs = None): #kwargs should be dictionaries
     """
     Plots a histogram with matplotlib, together with bin errors determined by the 68% central 
-    interval of the data. The histgram is plotted with matplotlib.pyplot.plot rather than
+    interval of the data. The histogram is plotted with matplotlib.pyplot.plot rather than
     matplotlib.pyplot.hist.
     
     params:
@@ -105,7 +105,7 @@ def histogram(data, domain, bins, normalize = False, fill_alpha=.35,
         counts. Defaults to 0.35.
     
     bin_weights (numpy array of floats with a size of len(data)): Bin weights used to rescale the
-        histgram bin counts. If set to None, no bin weights are used. Defaults to None.
+        histogram bin counts. If set to None, no bin weights are used. Defaults to None.
     
     hist_kwargs (dictionary): keyword arguments passed to numpy.histogram.
     
@@ -143,21 +143,47 @@ def histogram(data, domain, bins, normalize = False, fill_alpha=.35,
         
         
 def n_of_z(data, domain, bins, sky_fraction, is_redshift = True, kwargs=None):
+    """
+    Plots a histogram representing a radial n(z) selection function, where the data bins are 
+    normalized by spherical shells of the survey volume.
     
+    params:
+    ---------------------------------------------------------------------------------------------
+    data (numpy array of floats): The histogram bin counts
+    
+    domain (tuple of two floats): the domain of the histogram.
+    
+    bins (int or array of floats): The bin arguemnt passed to the numpy histogram function. If an
+        integer is passed, bins sets the number of bisn in the histogram. If an array is passed,
+        bins sets the bin edges.
+        
+    sky_fraction (float): A float betwee 0 and 1 representing the fraction of the sky that the 
+        survey covers
+    
+    is_redshift (bool): A boolena denoting whether the bin edges are in units of redshift (True) 
+        or comoving distance (False). Defaults to True.
+    
+    kwargs (dictionary): keyword arguments passed to histogram.
+    """
+    
+    # Fiducial LambdaCDM model
     model = FlatLambdaCDM(H0=100, Om0=.315)
     
+    # Convert integer number of bins to bin edges
     if type(bins) is int:
         bins = np.linspace(domain[0], domain[1], bins)
     
+    # Convert bin edges to comoving units
     if is_redshift:
         comov_bins = model.comoving_distance(bins)
     else:
         comov_bins = bins
         
+    # Calculate weights from bin edges
     weights = 1 / (sky_fraction * 4/3 * np.pi * np.diff(comov_bins**3))
-    
     weights = np.array(weights)
 
+    # Plot histogram
     if kwargs is None:
         histogram(data, domain, bins, bin_weights = weights)
     else:

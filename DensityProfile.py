@@ -1,5 +1,4 @@
 import numpy as np
-from astropy.table import Table, vstack #can remove these imports
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 import ShellVolumeMaskedPython as svm
@@ -97,10 +96,10 @@ def profile(voids,
     # Set up arrays for the void density profiles
     if prof:
         dens_prof = np.zeros(nbins, dtype=float)
-        num_in_prev_sphere = 0 # number of galaxies in privious radial bin
+        num_in_prev_sphere = 0 # number of galaxies in previous radial bin
     if prof_norm:
         dens_prof_norm = np.zeros(nbins, dtype=float)
-        num_in_prev_sphere_norm = 0 # number of galaxies in privious radial bin
+        num_in_prev_sphere_norm = 0 # number of galaxies in previous radial bin
     
     # Fill in each bin of the void density profile
     for i in range(nbins):

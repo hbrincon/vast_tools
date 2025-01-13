@@ -2,29 +2,32 @@ import numpy as np
 
 """
 This code has been adopted from the following individuals: Kelly Douglass
+
+The documentation format has been altered by Hernan Rincon
 """
 
 
 def bounding_volume(x, R):
-    """Return the volume and corners of a parallelpiped containing the
-    n input spheres of interest.
-    
-    Parameters
-    ----------
-    x : ndarray
-        Centers of n input spheres (n x 3 array).
-    R : ndarray
-        Radii of n input spheres (n x 1 array).
-
-    Returns
-    -------
-    vol : float
-        Volume of parallelpiped.
-    xmin : ndarray
-        Lower corner of volume.
-    xmax : ndarray
-        Upper corner of volume.
     """
+    
+    Returns the volume and corners of a parallelpiped containing the
+    N input spheres of interest.
+    
+    params:
+    ---------------------------------------------------------------------------------------------
+    x (numpy array of floats of shape (N, 3)): Centers of N input spheres. Each row contains the
+        following: (x coordinate, y coordinate, z coordinate)
+    
+    R (numpy array of floats of shape N): Radii of N input spheres.
+    
+    returns:
+    ---------------------------------------------------------------------------------------------
+    vol (float): Volume of parallelpiped.
+    
+    xmin (numpy array of floats of shape 3): Lower corner of volume.
+    
+    xmax (numpy array of floats of shape 3): Upper corner of volume.
+    """  
     n, d = x.shape
     
     # Compute the corners of the bounding parallelpiped containing
@@ -40,28 +43,29 @@ def bounding_volume(x, R):
     return vol, xmin, xmax
 
 def volume_of_spheres(x, R, nsamples=10000):
-    """Obtain the volume, with uncertainties, of the intersection and union of
-    n spherical volumes using Monte Carlo sampling.
-
-    Parameters
-    ----------
-    x : ndarray
-        Centers of n input spheres (n x 3 array).
-    R : ndarray
-        Radii of n input spheres (n x 1 array).
-    nsamples : int
-        Number of Monte Carlo samples to generate.
-
-    Returns
-    -------
-    ivol : float
-        Volume of intersecting regions of *all* spheres.
-    idv : float
-        Uncertainty in intersection volume due to Monte Carlo shot noise.
-    uvol : float
-        Volume of union of spheres.
-    udv : float
-        Uncertainty in union volume.
+    """
+    
+    Obtains the volume, with uncertainties, of the intersection and union of
+    N spherical volumes using Monte Carlo sampling.
+        
+    params:
+    ---------------------------------------------------------------------------------------------
+    x (numpy array of floats of shape (N, 3)): Centers of N input spheres. Each row contains the
+        following: (x coordinate, y coordinate, z coordinate)
+    
+    R (numpy array of floats of shape N): Radii of N input spheres.
+    
+    nsamples (int): Number of Monte Carlo samples to generate.
+    
+    returns:
+    ---------------------------------------------------------------------------------------------
+    ivol (float): Volume of intersecting regions of *all* spheres.
+    
+    idv (float): Uncertainty in intersection volume due to Monte Carlo shot noise.
+    
+    uvol (float): Volume of union of spheres.
+    
+    udv (float): Uncertainty in union volume.
     """
     n, d = x.shape
     R2 = R**2

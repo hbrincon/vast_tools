@@ -68,7 +68,7 @@ def toCoord(r,ra,dec):
         catalog, with r in Mpc/h and ra and dec in degrees
         
     returns:
-    ------------------------------------------------
+    ----------------------------------------------------------
     c1, c2, c3 (1-D numpy arrays): The cartesian coordinates 
         of the catalog in Mpc/h
     
@@ -161,10 +161,6 @@ class VoidMapVF():
         self.vfrad = maximals['radius']
         self.vfedge = maximals['edge']
 
-        #Not sure what's going on here
-        #self.vfc  = matplotlib.cm.nipy_spectral(np.linspace(0,1,len(self.vfr)))
-        #self.vfcc = np.random.choice(range(len(self.vfc)),len(self.vfc),replace=False)
-
         #Same coordinate conversion, but for holes
         self.vflag = holes['void']
         self.vfx2 = holes['x']
@@ -207,6 +203,11 @@ class VoidMapVF():
         params:
         ----------------------------------------------------------
         dec (float): the declianation of the cross-secitonal plane
+        
+        returns:
+        ----------------------------------------------------------
+        cr (list of lists): The radii of the hole-slice 
+            intersections for each void
         '''
         cr = []
         #loop through voids
@@ -237,6 +238,11 @@ class VoidMapVF():
         
         vfn4 (list): one of self.vfx4, self.vfy4, or self.vfz4, 
             corresponding to the dimension of the cross-section
+            
+        returns:
+        ----------------------------------------------------------
+        cr (list of lists): The radii of the hole-slice 
+            intersections for each void
         '''
 
         #list of <list of radii of hole-plane intersections> for each void
@@ -261,6 +267,28 @@ class VoidMapVF():
     def gcp2(self, cc1,cc2,crad,npt,chkdpth,ra_dec_z=True):
         '''
         Convert circles' coordinates to ordered boundary
+        
+        params:
+        ----------------------------------------------------------
+        cc1 (numpy array of floats): The comoving radial 
+            coordinates of the holes consituting a void
+            
+        cc2 (numpy array of floats): The right ascensions
+            coordinates of the holes consituting a void
+        
+        crad (list): The radii of the hole-slice 
+            intersections for a void
+            
+        npt (int): 
+        
+        chkdpth (int):
+        
+        ra_dec_z (bool)
+            
+        returns:
+        ----------------------------------------------------------
+        cr (numpy array): The radii of the hole-slice 
+            intersections
         '''
         if ra_dec_z:
             ccx = cc1*np.cos(cc2*D2R)
