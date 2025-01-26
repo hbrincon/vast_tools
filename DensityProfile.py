@@ -96,9 +96,11 @@ def profile(voids,
     # Set up arrays for the void density profiles
     if prof:
         dens_prof = np.zeros(nbins, dtype=float)
+        dens_prof_radii = np.zeros(nbins, dtype=float)
         num_in_prev_sphere = 0 # number of galaxies in previous radial bin
     if prof_norm:
         dens_prof_norm = np.zeros(nbins, dtype=float)
+        dens_prof_norm_radii = np.zeros(nbins, dtype=float)
         num_in_prev_sphere_norm = 0 # number of galaxies in previous radial bin
     
     # Fill in each bin of the void density profile
@@ -107,6 +109,7 @@ def profile(voids,
             # The edges of the current radial bin
             r_out = extent*(i+1)/nbins
             r_in = extent*(i)/nbins
+            dens_prof_radii[i] = (r_out + r_in) / 2
             
             # The number of points that fall within r_out of the void centers
             num_in_sphere = kdt.query_ball_point(void_centers[:,:3], r_out, return_length = True, workers = workers)
@@ -152,6 +155,7 @@ def profile(voids,
             # The edges of the current radial bin
             r_out = norm_extent*void_radii*(i+1)/nbins
             r_in = norm_extent*void_radii*(i)/nbins
+            dens_prof_norm_radii[i] = (r_out + r_in) / 2
             
             # The number of points that fall within r_out of the void centers
             num_in_sphere = kdt.query_ball_point(void_centers[:,:3], r_out, return_length = True, workers = workers)
@@ -195,12 +199,12 @@ def profile(voids,
     # Return the void radii
     
     if prof and prof_norm:
-        return dens_prof, dens_prof_norm
+        return (dens_prof, dens_prof_radii), (dens_prof_norm, dens_prof_norm_radii)
     
     elif prof:
-        return dens_prof
+        return dens_prof, dens_prof_radii
     
     elif prof_norm:
-        return dens_prof_norm
+        return dens_prof_norm, dens_prof_norm_radii
 
 

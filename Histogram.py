@@ -35,7 +35,7 @@ def poisson_central_interval(x, width):
     return lower, upper
 
 #Simple numpy histogram calculation with PCI
-def make_histogram(data, domain, bins, hist_kwargs = None):
+def _histogram(data, domain, bins, cumulative_under=False, cumulative_over=False, hist_kwargs = None):
     """
     Creates a numpy histogram, together with bin errors determined by the 68% central interval of
     the data.
@@ -49,6 +49,12 @@ def make_histogram(data, domain, bins, hist_kwargs = None):
     bins (int or array of floats): The bin arguemnt passed to the numpy histogram function. If an
         integer is passed, bins sets the number of bisn in the histogram. If an array is passed,
         bins sets the bin edges.
+
+    cumulative_under (bool): Boolean that when true outputs a cumulative histogram of the total
+        number of values below a threshold. Defaults to False
+
+    cumulative_over (bool): Boolean that when true outputs a cumulative histogram of the total
+        number of values above a threshold. Defaults to False
     
     hist_kwargs (dictionary): keyword arguments passed to numpy.histogram. 
     
@@ -69,6 +75,13 @@ def make_histogram(data, domain, bins, hist_kwargs = None):
         counts, edges = np.histogram(data, range = domain, bins=bins)
     else:
         counts, edges = np.histogram(data, range = domain, bins=bins, **hist_kwargs)
+    if cumulative_under:
+        if cumulative_over:
+            raise ValueError("Can't have both cumulative_under==True and cumulative_over==True")
+        counts = np.cumsum(counts)
+    elif cumulative_over:
+        counts = np.cumsum(counts[::-1])[::-1]
+        
     
     # The centers of the bins
     centers = edges[:-1] + np.diff(edges)/2
@@ -81,7 +94,7 @@ def make_histogram(data, domain, bins, hist_kwargs = None):
 
 #Plot histogram
 def histogram(data, domain, bins, normalize = False, fill_alpha=.35, 
-              bin_weights = None,
+              bin_weights = None, cumulative_under=False, cumulative_over=False, uncertanties = None,
               hist_kwargs = None, plot_kwargs = None, fill_kwargs = None): #kwargs should be dictionaries
     """
     Plots a histogram with matplotlib, together with bin errors determined by the 68% central 
@@ -106,17 +119,38 @@ def histogram(data, domain, bins, normalize = False, fill_alpha=.35,
     
     bin_weights (numpy array of floats with a size of len(data)): Bin weights used to rescale the
         histogram bin counts. If set to None, no bin weights are used. Defaults to None.
+
+    cumulative_under (bool): Boolean that when true outputs a cumulative histogram of the total
+        number of values below a threshold. Defaults to False
+
+    cumulative_over (bool): Boolean that when true outputs a cumulative histogram of the total
+        number of values above a threshold. Defaults to False
+
+    uncertainties (numpy array of floats): Uncertanties to be added in quadrature with the 
+        Poisson bin errors. Defaults to None.
     
-    hist_kwargs (dictionary): keyword arguments passed to numpy.histogram.
+    hist_kwargs (dictionary): keyword arguments passed to numpy.histogram. Defaults to None.
     
-    plot_kwargs (dictionary): keyword arguments passed to matplotlib.pyplot.plot.
+    plot_kwargs (dictionary): keyword arguments passed to matplotlib.pyplot.plot. Defaults to 
+        None.
     
-    fill_kwargs (dictionary): keyword arguments passed to matplotlib.pyplot.fill_between.
+    fill_kwargs (dictionary): keyword arguments passed to matplotlib.pyplot.fill_between. 
+        Defaults to None.
     """
     
     # Get the histogram data
-    counts, edges, centers, error = make_histogram(data, domain, bins, hist_kwargs)
-    
+    counts, edges, centers, error = _histogram(data, domain, bins, hist_kwargs, 
+                                                   cumulative_under=cumulative_under, cumulative_over=cumulative_over)
+    # Add user defined uncertanties 
+    if uncertanties is not None:
+        
+        if len(np.array(uncertanties).shape)==1:
+            uncertanties = (uncertanties, uncertanties)
+
+        error = (counts - error[0], error[1] - counts)
+        error = (np.sqrt(error[0]**2 + uncertanties[0]**2), np.sqrt(error[1]**2 + uncertanties[1]**2))
+        error = (counts - error[0], counts + error[1])
+        
     # Optionally apply weights to the bin counts
     if bin_weights is not None:
         counts = counts.astype(float) * bin_weights
@@ -126,7 +160,6 @@ def histogram(data, domain, bins, normalize = False, fill_alpha=.35,
     if normalize == True:
         norm = np.sum(counts) * np.diff(edges)
         counts = counts.astype(float) / norm
-        
         error = (error[0] / norm, error[1] / norm)
         
     # Plot the histogram
@@ -157,13 +190,13 @@ def n_of_z(data, domain, bins, sky_fraction, is_redshift = True, kwargs=None):
         integer is passed, bins sets the number of bisn in the histogram. If an array is passed,
         bins sets the bin edges.
         
-    sky_fraction (float): A float betwee 0 and 1 representing the fraction of the sky that the 
+    sky_fraction (float): A float between 0 and 1 representing the fraction of the sky that the 
         survey covers
     
     is_redshift (bool): A boolena denoting whether the bin edges are in units of redshift (True) 
         or comoving distance (False). Defaults to True.
     
-    kwargs (dictionary): keyword arguments passed to histogram.
+    kwargs (dictionary): keyword arguments passed to histogram. Defaults to None.
     """
     
     # Fiducial LambdaCDM model

@@ -16,6 +16,7 @@ import VoidVolume as vol
 import VoidOverlap as vo
 import VoidSWRadii as vswr
 import SurveyVolume as sv
+import DensityProfile as dp
 import ShellVolumeMaskedPython as svm
 
 """
@@ -717,7 +718,29 @@ class VoidFinderCatalog (VoidCatalog):
             
         return membership
 
+    def calculate_density_profile():
+        
+        self.density_profile, self.normalized_density_profile = dp.profile(
+            self.maximals, 
+            self.galaxies, 
+            survey_density, 
+            nbins = 30, 
+            extent = 120, 
+            norm_extent = 3, 
+            radius_column_name="R_eff", 
+            prof=True, 
+            prof_norm=True,
+            mask=self.mask, 
+            mask_resolution=self.mask_info['MSKRES'], 
+            dist_limits=[self.info['DLIML'], self.info['DLIMU']] 
+            xyz_limits=None, 
+            mask_type="ra_dec_z", 
+            workers = 1
+           )
 
+    def plot_density_profile():
+
+        pass
     '''
     def subsample_catalog(self, mask_hdu, catalog_file_path, rmin = None, rmax = None):
          """
@@ -729,7 +752,7 @@ class VoidFinderCatalog (VoidCatalog):
             selecting the galaxies. Defaults to None, in which case, the void catalog's angular mask
             is used.
             
-        catalog_file_path (string): The location to save eth modified void catalog to
+        catalog_file_path (string): The location to save the modified void catalog to
         
         rmin (float): The minimum line-of-sight comoving distance for the calculation. Defaults to
             None, in which case the catalog redshift limit is used.
